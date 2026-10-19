@@ -506,7 +506,7 @@ func importBackup(ctx context.Context, args []string) (err error) {
 	if pass, err = password(pass); err != nil {
 		return err
 	}
-	rep, err := backup.Stage(ctx, cfg.DataDir, rest[0], backup.Options{Password: pass})
+	rep, err := backup.Stage(ctx, cfg.DataDir, rest[0], backup.Options{Password: pass, PluginTables: core.PluginTables})
 	if errors.Is(err, backup.ErrNeedsPassword) {
 		return usagef("%v: add --password - (or set RUNWELL_PASSWORD)", err)
 	} else if err != nil {

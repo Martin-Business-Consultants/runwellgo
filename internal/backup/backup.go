@@ -33,6 +33,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
 )
 
 // Format is what a backup's manifest says it is.
@@ -80,6 +82,10 @@ type Report struct {
 type Options struct {
 	// Password is everyone's in a data export, which leaves passwords out.
 	Password string
+	// PluginTables makes the built-in plugins' own tables in a data
+	// export's new database, so their rows (a Rails plugin's, kept under the
+	// same names) come in with the core's; nil leaves them out.
+	PluginTables func(ctx context.Context, db *store.DB) error
 }
 
 // ErrNeedsPassword is a data export imported without a password for the

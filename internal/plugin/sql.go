@@ -250,6 +250,13 @@ func splitStatements(schema string) []string {
 	return out
 }
 
+// ApplySchema makes a plugin's own tables in db from its manifest's Schema,
+// checked as when it loads: for an import that brings a plugin's rows along
+// before the plugin has run here.
+func ApplySchema(ctx context.Context, db *store.DB, key, schema string) error {
+	return applySchema(ctx, db, key, schema)
+}
+
 // applySchema makes a plugin's tables, statement by statement.
 func applySchema(ctx context.Context, db *store.DB, key, schema string) error {
 	if err := checkSchema(key, schema); err != nil {

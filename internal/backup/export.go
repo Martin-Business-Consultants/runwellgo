@@ -68,6 +68,18 @@ func stageExport(ctx context.Context, dataDir string, zr *zip.Reader, opts Optio
 		return nil, err
 	}
 	known := store.Tables()
+	if opts.PluginTables != nil {
+		if err := opts.PluginTables(ctx, db); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("making the plugins' tables: %w", err)
+		}
+		plugins, err := pluginTableNames(ctx, db, known)
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		known = append(slices.Clone(known), plugins...)
+	}
 	blobKeys := map[string]string{}
 	err = db.Tx(ctx, func(tx *sql.Tx) error {
 		for _, f := range zr.File {
@@ -129,6 +141,22 @@ func stageExport(ctx context.Context, dataDir string, zr *zip.Reader, opts Optio
 	}
 	ok = true
 	return rep, nil
+}
+
+// pluginTableNames are the tables in db beyond the core's: the plugins'.
+func pluginTableNames(ctx context.Context, db *store.DB, core []string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return nil, err
+	}
+	names, err := store.ScanAll(rows, func(r *sql.Rows) (string, error) {
+		var n string
+		return n, r.Scan(&n)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(names, func(n string) bool { return slices.Contains(core, n) }), nil
 }
 
 // readme reads what the export's README.txt says of it: whose it is and

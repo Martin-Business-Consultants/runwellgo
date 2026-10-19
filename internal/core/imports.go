@@ -95,7 +95,7 @@ func (a *App) createImport(c *Ctx) error {
 	if err := backup.Discard(a.cfg.DataDir); err != nil { // one waiting at a time
 		return err
 	}
-	rep, err := backup.Stage(c.R.Context(), a.cfg.DataDir, upload, backup.Options{Password: password})
+	rep, err := backup.Stage(c.R.Context(), a.cfg.DataDir, upload, backup.Options{Password: password, PluginTables: PluginTables})
 	if errors.Is(err, backup.ErrNeedsPassword) {
 		return &apierr.Error{Status: 422, Code: "needs_password", Message: err.Error(), Errors: map[string][]string{"password": {"is needed: a data export has no passwords"}}}
 	}
