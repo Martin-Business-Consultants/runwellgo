@@ -106,7 +106,9 @@ func exitCode(err error) int {
 
 func run(ctx context.Context, stop func(), args []string) error {
 	cmd := "serve"
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+	// A flag first is serve's (runwell --addr :9000), but for these, which
+	// are commands spelled as flags.
+	if len(args) > 0 && (!strings.HasPrefix(args[0], "-") || args[0] == "--version" || args[0] == "-h" || args[0] == "--help") {
 		cmd, args = args[0], args[1:]
 	}
 	switch cmd {

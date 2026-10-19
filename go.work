@@ -1,0 +1,13 @@
+// Local development: the core and the official binary together, so a
+// change to either builds at once. Add a plugin checkout beside this one
+// to work on it in the app (go work use ../runwellgo-ai); don't commit
+// that line. Docker, CI and releases build with GOWORK=off: cmd/runwell's
+// go.mod (the plugins at their tags, the core replaced by ../..) decides.
+go 1.26.0
+
+toolchain go1.26.9
+
+use (
+	.
+	./cmd/runwell
+)

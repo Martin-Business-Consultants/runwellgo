@@ -16,7 +16,8 @@ import * as agents from "./routes/agents/index.js";
 
 const areas = [home, clients, engagements, work, commitments, requests, notifications, settings, plugins, agents, portal, approvals];
 
-// Built-in plugins' own screens (plugins/<key>/index.js), each behind its
+// The plugins' own screens (plugins/<key>/index.js, copied in from each
+// plugin's module by make plugin-ui), each behind its
 // plugin being on.
 import PluginGate from "./plugins/PluginGate.svelte";
 const pluginUIs = Object.values(import.meta.glob("./plugins/*/index.js", { eager: true }));

@@ -16,14 +16,20 @@
 
 FROM golang:1.26.9-alpine AS build
 WORKDIR /src
+# The binary is cmd/runwell, a module of its own: this repository's core
+# (its go.mod replaces the core with ../..) and the official plugins, at the
+# versions its go.mod names. go.work is for local development, not this.
+ENV GOWORK=off
 COPY go.mod go.sum ./
-RUN go mod download
+COPY cmd/runwell/go.mod cmd/runwell/go.sum ./cmd/runwell/
+RUN cd cmd/runwell && go mod download
 COPY . .
 # The release this is: the VERSION file, unless the build passes one
 # (Hoster and other hosts that build from the repository pass none).
 ARG VERSION=
 RUN V="${VERSION:-$(cat VERSION 2>/dev/null || echo dev)}" \
- && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${V#v}" -o /out/runwell ./cmd/runwell
+ && cd cmd/runwell \
+ && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${V#v}" -o /out/runwell .
 
 # Alpine for CA certificates (SMTP, webhooks, deploy hooks) and su-exec: the
 # container starts as root only to hand /data to the app user, whatever owns

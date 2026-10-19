@@ -445,7 +445,7 @@ func (a *App) pluginExtensions(c *Ctx) error {
 			}
 		}
 	}
-	// Which plugins are on: a built-in plugin's own screens (ui/src/plugins)
+	// Which plugins are on: an official plugin's own screens (its ui/)
 	// show only while it is.
 	enabled := []string{}
 	for _, p := range a.enabledPlugins() {

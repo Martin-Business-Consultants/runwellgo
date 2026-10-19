@@ -9,7 +9,7 @@ approval makes Runwell act on it.
 
 It's two pieces:
 
-- **The Runners plugin** (`plugins/runners`, screens in `ui/src/plugins/runners`): Settings ›
+- **The Runners plugin** ([runwellgo-runners](https://github.com/Martin-Business-Consultants/runwellgo-runners), in the official binary): Settings ›
   Runners, the jobs at `/runners` with each job's live log, a **Code** tab and a **Hand to a runner**
   quick action on every piece of work, and agent tools.
 - **`runwell-runner`** (`cmd/runwell-runner`): the program on your machine. `make build` and
