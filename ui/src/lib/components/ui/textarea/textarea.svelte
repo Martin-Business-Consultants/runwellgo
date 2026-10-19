@@ -9,11 +9,12 @@
 	} = $props();
 </script>
 
+<!-- Messenger's textarea-control surface, on the <textarea> itself. -->
 <textarea
 	bind:this={ref}
 	data-slot={dataSlot}
 	class={cn(
-		"border-input dark:bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-md border bg-transparent px-2.5 py-2 text-base shadow-xs transition-[color,box-shadow] focus-visible:ring-3 aria-invalid:ring-3 md:text-sm flex field-sizing-content min-h-16 w-full outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+		"field-sizing-content flex min-h-18 w-full rounded-lg border border-input bg-background not-dark:bg-clip-padding px-[calc(--spacing(3)-1px)] py-[calc(--spacing(1.5)-1px)] text-base text-foreground shadow-xs/5 ring-ring/24 outline-none transition-shadow placeholder:text-muted-foreground/72 focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 disabled:cursor-not-allowed disabled:opacity-64 [&:is(:disabled,:focus-visible,[aria-invalid=true])]:shadow-none max-sm:min-h-21 sm:text-sm dark:bg-input/32 dark:aria-invalid:ring-destructive/24",
 		className
 	)}
 	bind:value

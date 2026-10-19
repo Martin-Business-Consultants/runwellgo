@@ -48,6 +48,7 @@
     <Skeleton class="h-96 w-full" />
   {:else}
     <Card.Root id="providers-only">
+      <Card.Header><Card.Title>Passwords and emailed links</Card.Title></Card.Header>
       <Card.Content>
         <Field.Field orientation="horizontal">
           <Field.Content>

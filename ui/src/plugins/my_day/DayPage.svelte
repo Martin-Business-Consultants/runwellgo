@@ -27,6 +27,7 @@
   import DatePicker from "$lib/components/DatePicker.svelte";
   import PersonAvatar from "$lib/components/PersonAvatar.svelte";
   import FilterMenu from "$lib/components/FilterMenu.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import TodoRow from "./TodoRow.svelte";
   import TodoCard from "./TodoCard.svelte";
   import { api, get } from "$lib/api.js";
@@ -240,7 +241,8 @@
         </Card.Root>
       </Collapsible.Root>
 
-      <Card.Root class="relative gap-4 py-4">
+      <Card.Root class="relative">
+        <Card.Header><Card.Title>Your {session.term("work", 2).toLowerCase()}</Card.Title></Card.Header>
         <Card.Content class="flex flex-col gap-4 px-2">
           {#each data.groups as g (g.key)}
             <section aria-label={g.title}>
@@ -267,7 +269,7 @@
         </Card.Content>
 
         {#if picked.length}
-          <div class="bg-background/95 sticky bottom-4 mx-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg">
+          <div class="bg-background/95 sticky bottom-4 mx-2 mt-1 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg">
             <span class="font-medium tabular-nums">{picked.length} picked</span>
             <Button variant="outline" size="sm" onclick={() => copyPrompt(pickedInOrder())}><Sparkles />Copy for AI</Button>
             <Button variant="outline" size="sm" onclick={() => bulk("POST", BASE + "/bulk/priorities")}><Pin />Prioritize</Button>
@@ -303,7 +305,7 @@
           <TodoCard todo={data.todo} {count} limit={data.limit} changed={() => changed(false)} />
         {/key}
       {:else}
-        <Card.Root><Card.Content class="text-muted-foreground text-sm">Nothing to work on. Pick a piece of work on the left when there is.</Card.Content></Card.Root>
+        <EmptyState icon="check-circle" title="Nothing to work on." description="Pick a piece of work on the left when there is." />
       {/if}
     </div>
   </div>

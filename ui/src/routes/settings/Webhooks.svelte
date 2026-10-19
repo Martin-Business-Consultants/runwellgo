@@ -54,6 +54,7 @@
 
 <SettingsLayout title="Webhooks">
   <Card.Root>
+    <Card.Header><Card.Title>How webhooks work</Card.Title></Card.Header>
     <Card.Content class="text-muted-foreground flex flex-col gap-2 text-sm">
       <p>Send each event (a {session.term("client").toLowerCase()} added, an agreement approved, {session.term("work").toLowerCase()} done…) as JSON to another tool: Zapier, Make, n8n, a spreadsheet script, your own server.</p>
       <p>Each request is signed with the endpoint’s secret: <code>X-Runwell-Signature</code> is <code>sha256=</code> and the HMAC-SHA256 of <code>X-Runwell-Timestamp</code>, a dot, and the body. Failed deliveries are tried again with growing waits; twenty failures in a row switch an endpoint off.</p>

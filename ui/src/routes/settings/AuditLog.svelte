@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // Settings › Audit log: everything that happened, newest first, filtered
   // by area, period and person, and downloadable as CSV.
   import SettingsLayout from "$lib/layout/SettingsLayout.svelte";
@@ -50,7 +51,7 @@
   {#if !data}
     <Skeleton class="h-96 w-full" />
   {:else if !data.events.length}
-    <Card.Root><Card.Content class="text-muted-foreground py-10 text-center text-sm">Nothing in this area and period.</Card.Content></Card.Root>
+    <EmptyState icon="history" title="Nothing in this area and period." />
   {:else}
     <Card.Root class="py-0">
       <Table.Root>

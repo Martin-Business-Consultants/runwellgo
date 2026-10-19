@@ -166,9 +166,9 @@
     {#if def.stats && data[def.stats]?.length}
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {#each data[def.stats] as s, i (i)}
-          <Card.Root class="gap-1 py-3">
-            <Card.Content class="px-4">
-              <p class="text-muted-foreground truncate text-xs">{s.label}</p>
+          <Card.Root class="card-framed:h-full">
+            <Card.Header><Card.Title class="truncate">{s.label}</Card.Title></Card.Header>
+            <Card.Content class="flex-1 gap-0.5 px-4 py-3">
               <p class="text-lg font-semibold tabular-nums">{s.value}</p>
               {#if s.hint}<p class="text-muted-foreground text-xs">{s.hint}</p>{/if}
             </Card.Content>

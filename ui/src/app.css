@@ -4,6 +4,12 @@
 @import "@fontsource-variable/manrope";
 
 @custom-variant dark (&:is(.dark *));
+/* A card is a frame (messenger's look: a tinted rim, its header and
+   footer on the tint, the body a white panel) when it holds a body or a
+   table; a card that's only a header and footer (a link in a grid) is one
+   solid surface. */
+@custom-variant card-framed (&:has(> [data-slot=card-content], > [data-slot=table-container]));
+@custom-variant card-solid (&:not(:has(> [data-slot=card-content], > [data-slot=table-container])));
 
 /* Runwell's look. Indigo (#5D63CD, the brand the Rails app shipped as its
    "Indigo" scheme) means "act here": buttons, links, focus, the current
@@ -27,8 +33,17 @@
 	--accent: #eceefa;
 	--accent-foreground: #23286e;
 	--destructive: #c2362b;
-	--border: #e3e5ed;
-	--input: #d9dce6;
+	--destructive-foreground: #b02f25;
+	/* Lines are the ink, thinned, so they sit as quietly on the mist
+	   sidebar and a frame's tint as on white. */
+	--border: rgb(27 30 46 / 10%);
+	--input: rgb(27 30 46 / 14%);
+	--info: #2a78d6;
+	--info-foreground: #1d5fae;
+	--success: #2f8f5b;
+	--success-foreground: #23714a;
+	--warning: #c47d12;
+	--warning-foreground: #8f5a0b;
 	--ring: #5d63cd;
 	--chart-1: #5d63cd;
 	--chart-2: #2f8f5b;
@@ -64,7 +79,14 @@
 	--accent: #262a42;
 	--accent-foreground: #e8e9f0;
 	--destructive: #f07167;
+	--destructive-foreground: #f4938b;
 	--border: rgb(255 255 255 / 9%);
+	--info: #5b9cf0;
+	--info-foreground: #8bb8f5;
+	--success: #5cc48b;
+	--success-foreground: #7fd3a5;
+	--warning: #e3a63f;
+	--warning-foreground: #ecbe6f;
 	--input: rgb(255 255 255 / 14%);
 	--ring: #8b90f0;
 	--chart-1: #8b90f0;
@@ -101,6 +123,13 @@
 	--color-input: var(--input);
 	--color-border: var(--border);
 	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-info: var(--info);
+	--color-info-foreground: var(--info-foreground);
+	--color-success: var(--success);
+	--color-success-foreground: var(--success-foreground);
+	--color-warning: var(--warning);
+	--color-warning-foreground: var(--warning-foreground);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
 	--color-muted-foreground: var(--muted-foreground);
@@ -171,7 +200,7 @@
 		outline-offset: 2px;
 		border-radius: var(--radius-md);
 	}
-	tr[data-nav-current] {
+	tr[data-nav-current], tr[data-nav-current] > td {
 		outline-offset: -2px;
 		background: var(--muted);
 	}

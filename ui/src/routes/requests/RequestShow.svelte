@@ -63,6 +63,7 @@
   <div class="grid gap-4 lg:grid-cols-3">
     <div class="flex min-w-0 flex-col gap-4 lg:col-span-2">
       <Card.Root>
+        <Card.Header><Card.Title>Message</Card.Title></Card.Header>
         <Card.Content>
           {#if request.body_html}
             <RichText html={request.body_html} />

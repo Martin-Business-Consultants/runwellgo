@@ -97,9 +97,9 @@
   <NoMatches />
 {:else if !work.length}
   {#if data.any_work}
-    <EmptyState title={`No ${words} matches these filters.`} />
+    <EmptyState icon="check-square" title={`No ${words} matches these filters.`} />
   {:else}
-    <EmptyState title={`No ${words} yet.`}>
+    <EmptyState icon="check-square" title={`No ${words} yet.`}>
       It lives on {session.term("engagement", 2).toLowerCase()}: approving an agreement adds one per {session.term("scope_item").toLowerCase()}, and you can add more there.
       <a class="underline-offset-4 hover:underline" href="/engagements?state=open">Go to {session.term("engagement", 2).toLowerCase()}</a>
     </EmptyState>

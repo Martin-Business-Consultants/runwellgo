@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // Money: what's agreed and approved, by month, by client, by type,
   // recurring against fixed, and what's still in the pipeline. Each number
   // opens the list it counts. Nothing when the install hides prices.
@@ -25,17 +26,17 @@
 </script>
 
 {#snippet stat(label, value, hint, href)}
-  <Card.Root class="gap-1 py-4">
-    <Card.Content class="px-4">
-      <p class="text-muted-foreground text-sm">{label}</p>
+  <Card.Root class="card-framed:h-full">
+    <Card.Header><Card.Title>{label}</Card.Title></Card.Header>
+    <Card.Content class="flex-1 gap-0.5 px-4 py-3">
       <a {href} class="hover:underline"><p class="text-2xl font-bold tracking-tight tabular-nums">{value}</p></a>
-      {#if hint}<p class="text-muted-foreground mt-0.5 text-xs">{hint}</p>{/if}
+      {#if hint}<p class="text-muted-foreground text-xs">{hint}</p>{/if}
     </Card.Content>
   </Card.Root>
 {/snippet}
 
 {#if money.hidden}
-  <p class="text-muted-foreground py-6 text-center text-sm">Prices are hidden on this install, so there's no money to show. Settings › Names can show them.</p>
+  <EmptyState variant="inline" icon="activity">Prices are hidden on this install, so there's no money to show. Settings › Names can show them.</EmptyState>
 {:else}
   <div class="flex flex-col gap-4">
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -67,7 +68,7 @@
               </BarChart>
             </Chart.Container>
           {:else}
-            <p class="text-muted-foreground py-10 text-center text-sm">Nothing approved in the last 12 months yet: send an agreement and it shows here once they say yes.</p>
+            <EmptyState variant="inline" icon="activity">Nothing approved in the last 12 months yet: send an agreement and it shows here once they say yes.</EmptyState>
           {/if}
         </Card.Content>
       </Card.Root>

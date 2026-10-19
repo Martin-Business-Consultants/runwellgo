@@ -50,6 +50,15 @@ func (a *App) portalRoutes(mux *http.ServeMux) {
 	a.handle(mux, "POST /api/portal/requests", a.createPortalRequest, portal, tool("portal_send_request", "Ask for something",
 		note("A request they triage: a short subject and what you need (and by when) in body. Show the person what you'll send first."),
 		body("request", `{subject (required), body: text}`, true)))
+	a.handle(mux, "GET /api/portal/requests/{id}", a.showPortalRequest, portal, tool("portal_request", "One request: what you asked, the notes on it, and its files",
+		note("Give its id, from portal_requests. The notes are the ones shared with you and the ones you wrote, oldest first."),
+		next("portal_add_request_note")))
+	a.handle(mux, "POST /api/portal/requests/{id}/notes", a.createPortalRequestNote, portal, tool("portal_add_request_note", "Add a note to a request",
+		note("They see it on the request. Show the person what you'll send first."),
+		body("note", `{body (required): rich text or plain}`, true)))
+	a.handle(mux, "POST /api/portal/requests/{id}/documents", a.createPortalRequestDocuments, portal, tool("portal_add_request_files", "Add files to a request",
+		note("They see the files on the request."),
+		file("files", "The file.")))
 	a.handle(mux, "GET /api/portal/documents/{id}", a.downloadPortalDocument, portal)
 }
 
@@ -832,8 +841,9 @@ func (a *App) downloadPortalDocument(c *Ctx) error {
 			(d.documentable_type = 'Client' AND d.documentable_id = ?)
 			OR (d.documentable_type = 'Engagement' AND d.documentable_id IN (SELECT id FROM engagements WHERE client_id = ?))
 			OR (d.documentable_type = 'ScopeItem' AND d.documentable_id IN (SELECT s.id FROM scope_items s JOIN agreement_versions v ON v.id = s.agreement_version_id JOIN engagements e ON e.id = v.engagement_id WHERE e.client_id = ?))
-			OR (d.documentable_type = 'Todo' AND d.documentable_id IN (SELECT t.id FROM todos t JOIN engagements e ON e.id = t.engagement_id WHERE e.client_id = ? AND t.client_visible = 1)))`,
-		id, clientID, clientID, clientID, clientID)
+			OR (d.documentable_type = 'Todo' AND d.documentable_id IN (SELECT t.id FROM todos t JOIN engagements e ON e.id = t.engagement_id WHERE e.client_id = ? AND t.client_visible = 1))
+			OR (d.documentable_type = 'Request' AND d.documentable_id IN (SELECT id FROM requests WHERE client_id = ?)))`,
+		id, clientID, clientID, clientID, clientID, clientID)
 	if err != nil {
 		return err
 	}
@@ -956,19 +966,12 @@ func (a *App) listPortalRequests(c *Ctx) error {
 		if err := r.Scan(&id, &subject, &at, &status, &reason); err != nil {
 			return nil, err
 		}
-		words := "closed"
-		switch status {
-		case "open":
-			words = "open: not dealt with yet"
+		if status == "open" {
 			open++
-		case "promoted":
-			words = "taken on"
-		default:
-			if reason != "" {
-				words += ": " + reason
-			}
 		}
-		return O("id", id, "subject", subject, "received_at", at, "status", words, "state", status), nil
+		words := portalRequestStatus(status, reason)
+		return O("id", id, "subject", subject, "received_at", at, "status", words, "state", status,
+			"url", fmt.Sprintf("%s/portal/requests/%d", a.BaseURL(), id)), nil
 	})
 	if err != nil {
 		return err
@@ -1019,4 +1022,193 @@ func (a *App) createPortalRequest(c *Ctx) error {
 	}
 	c.Summary = "Sent. We'll get back to you."
 	return c.JSON(201, O("summary", c.Summary, "notice", c.Summary, "request", O("id", id, "subject", subject, "received_at", now, "status", "open: not dealt with yet", "state", "open")))
+}
+
+// portalRequestStatus is a request's status in the client's words.
+func portalRequestStatus(status, reason string) string {
+	switch status {
+	case "open":
+		return "open: not dealt with yet"
+	case "promoted":
+		return "taken on"
+	}
+	if reason != "" {
+		return "closed: " + reason
+	}
+	return "closed"
+}
+
+// portalRequestID is one of the client's requests; notFound for another's.
+func (a *App) portalRequestID(c *Ctx) (int64, error) {
+	id, err := c.IntParam("id")
+	if err != nil {
+		return 0, err
+	}
+	n, err := store.Count(c.R.Context(), a.store, `SELECT count(*) FROM requests WHERE id = ? AND client_id = ?`, id, c.Actor.Contact.ClientID)
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		return 0, notFound("request")
+	}
+	return id, nil
+}
+
+// showPortalRequest is one request as the client sees it: what they asked,
+// the notes shared with them and their own, oldest first, and its files the
+// client may see. Never the team's internal notes or files.
+func (a *App) showPortalRequest(c *Ctx) error {
+	ctx := c.R.Context()
+	id, err := a.portalRequestID(c)
+	if err != nil {
+		return err
+	}
+	var subject, status, reason, sender string
+	var body *string
+	var at store.Time
+	if err := a.store.QueryRowContext(ctx, `SELECT subject, body, received_at, status, COALESCE(dismissed_reason, ''), COALESCE(sender_name, '') FROM requests WHERE id = ?`, id).
+		Scan(&subject, &body, &at, &status, &reason, &sender); err != nil {
+		return err
+	}
+	html := ""
+	if body != nil {
+		html = richTextHTML(*body)
+	}
+	notes, err := a.portalRequestNotes(ctx, id, c.Actor.Contact.ID)
+	if err != nil {
+		return err
+	}
+	docs, err := a.portalRequestDocuments(ctx, id, c.Actor.Contact.ID)
+	if err != nil {
+		return err
+	}
+	words := portalRequestStatus(status, reason)
+	c.Summary = fmt.Sprintf("%s: %s. %s, %s.", subject, words, pluralize(len(notes), "note"), pluralize(len(docs), "file"))
+	return c.JSON(200, O("summary", c.Summary, "request", O("id", id, "subject", subject, "body", agentTextOrNil(html), "body_html", html,
+		"sender_name", nullable(sender), "received_at", at, "status", words, "state", status, "notes", notes, "documents", docs)))
+}
+
+// portalRequestNotes are a request's notes the client sees, oldest first:
+// who wrote each (a name only, never a teammate's address) and whether it
+// was this contact.
+func (a *App) portalRequestNotes(ctx context.Context, requestID, contactID int64) ([]Obj, error) {
+	rows, err := a.store.QueryContext(ctx, `SELECT n.id, n.body, n.occurred_at, COALESCE(n.contact_id, 0), COALESCE(ct.name, ''), COALESCE(NULLIF(u.name, ''), '')
+		FROM notes n LEFT JOIN users u ON u.id = n.author_id LEFT JOIN contacts ct ON ct.id = n.contact_id
+		WHERE n.subject_type = 'Request' AND n.subject_id = ? AND n.client_visible = 1 ORDER BY n.occurred_at, n.id`, requestID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := store.ScanAll(rows, func(r *sqlRows) (Obj, error) {
+		var id, cid int64
+		var body, contact, user string
+		var at store.Time
+		if err := r.Scan(&id, &body, &at, &cid, &contact, &user); err != nil {
+			return nil, err
+		}
+		name, ours := contact, cid != 0
+		if !ours {
+			name = user
+		}
+		html := richTextHTML(body)
+		return O("id", id, "body", agentTextOrNil(html), "body_html", html, "occurred_at", at,
+			"author", O("name", nullable(name), "from_client", ours, "you", ours && cid == contactID)), nil
+	})
+	if out == nil {
+		out = []Obj{}
+	}
+	return out, err
+}
+
+// portalRequestDocuments are a request's files the client sees, latest first.
+func (a *App) portalRequestDocuments(ctx context.Context, requestID, contactID int64) ([]Obj, error) {
+	docs, err := a.documentsJSON(ctx, `d.documentable_type = 'Request' AND d.documentable_id = ? AND d.client_visible = 1`, requestID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Obj, 0, len(docs))
+	for _, d := range docs {
+		id := d.Get("id")
+		var by any
+		if ct, ok := d.Get("uploaded_by_contact").(Obj); ok {
+			by = O("name", ct.Get("name"), "from_client", true, "you", ct.Get("id") == contactID)
+		} else if u, ok := d.Get("uploaded_by").(Obj); ok {
+			by = O("name", u.Get("name"), "from_client", false, "you", false)
+		}
+		out = append(out, O("id", id, "filename", d.Get("filename"), "byte_size", d.Get("byte_size"), "content_type", d.Get("content_type"),
+			"url", fmt.Sprintf("%s/api/portal/documents/%v", a.BaseURL(), id), "created_at", d.Get("created_at"), "uploaded_by", by))
+	}
+	return out, nil
+}
+
+// createPortalRequestNote is the client's note on their request: shared,
+// since they wrote it, and recorded in the request's history.
+func (a *App) createPortalRequestNote(c *Ctx) error {
+	ctx := c.R.Context()
+	id, err := a.portalRequestID(c)
+	if err != nil {
+		return err
+	}
+	body, err := c.Wrapped("note")
+	if err != nil {
+		return err
+	}
+	html := sanitizeRichText(str(body["body"]))
+	if plainText(html) == "" && !strings.Contains(html, "<img") {
+		inv := apierr.Invalid{}
+		inv.Add("body", "can't be blank")
+		return inv.Err()
+	}
+	ct := c.Actor.Contact
+	var noteID int64
+	err = a.write(ctx, c.Actor, func(t *Tx) error {
+		now := store.Now().DB()
+		noteID, err = t.Insert(`INSERT INTO notes (subject_type, subject_id, body, kind, occurred_at, source, client_visible, contact_id, created_at, updated_at) VALUES ('Request', ?, ?, 'internal', ?, ?, 1, ?, ?, ?)`,
+			id, html, now, c.Actor.Source(), ct.ID, now, now)
+		if err != nil {
+			return err
+		}
+		t.Reindex("Note", noteID)
+		return t.Event("Request", id, "note.added", map[string]any{"kind": "internal"})
+	})
+	if err != nil {
+		return err
+	}
+	notes, err := a.portalRequestNotes(ctx, id, ct.ID)
+	if err != nil {
+		return err
+	}
+	c.Summary = "Note added."
+	return c.JSON(201, O("summary", c.Summary, "notes", notes))
+}
+
+// createPortalRequestDocuments are the client's files on their request:
+// shared, since they sent them.
+func (a *App) createPortalRequestDocuments(c *Ctx) error {
+	ctx := c.R.Context()
+	id, err := a.portalRequestID(c)
+	if err != nil {
+		return err
+	}
+	files, err := c.uploads()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.R.MultipartForm.RemoveAll() }() // best-effort: temp files
+	if len(files) == 0 {
+		return &apierr.Error{Status: 422, Code: "refused", Message: "Choose a file to upload."}
+	}
+	var ids []int64
+	err = a.write(ctx, c.Actor, func(t *Tx) error {
+		ids, err = t.addDocuments("Request", id, files, nil, c.Actor.Contact.ID, true)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	docs, err := a.portalRequestDocuments(ctx, id, c.Actor.Contact.ID)
+	if err != nil {
+		return err
+	}
+	c.Summary = pluralize(len(ids), "file") + " added."
+	return c.JSON(201, O("summary", c.Summary, "documents", docs))
 }

@@ -70,6 +70,9 @@ type documentRow struct {
 	SubjectType, Filename, ContentType  string
 	UploaderName                        string
 	ClientVisible                       bool
+	// ContactID is the client's contact who uploaded it in the portal.
+	ContactID   int64
+	ContactName string
 	CreatedAt                           store.Time
 }
 
@@ -77,8 +80,9 @@ type documentRow struct {
 // (documents/_document.json).
 func (a *App) documentsJSON(ctx context.Context, where string, args ...any) ([]Obj, error) {
 	rows, err := a.store.QueryContext(ctx, `SELECT d.id, d.documentable_type, d.documentable_id, COALESCE(d.uploaded_by_id, 0), COALESCE(NULLIF(u.name, ''), u.email_address, ''),
-			d.client_visible, d.created_at, COALESCE(b.filename, ''), COALESCE(b.content_type, ''), COALESCE(b.byte_size, 0)
-		FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by_id
+			d.client_visible, d.created_at, COALESCE(b.filename, ''), COALESCE(b.content_type, ''), COALESCE(b.byte_size, 0),
+			COALESCE(d.uploaded_by_contact_id, 0), COALESCE(ct.name, '')
+		FROM documents d LEFT JOIN users u ON u.id = d.uploaded_by_id LEFT JOIN contacts ct ON ct.id = d.uploaded_by_contact_id
 		LEFT JOIN active_storage_attachments x ON x.record_type = 'Document' AND x.record_id = d.id AND x.name = 'file'
 		LEFT JOIN active_storage_blobs b ON b.id = x.blob_id
 		WHERE `+where+` ORDER BY d.created_at DESC, d.id DESC`, args...)
@@ -87,7 +91,7 @@ func (a *App) documentsJSON(ctx context.Context, where string, args ...any) ([]O
 	}
 	docs, err := store.ScanAll(rows, func(r *sqlRows) (documentRow, error) {
 		var d documentRow
-		err := r.Scan(&d.ID, &d.SubjectType, &d.SubjectID, &d.UploaderID, &d.UploaderName, &d.ClientVisible, &d.CreatedAt, &d.Filename, &d.ContentType, &d.ByteSize)
+		err := r.Scan(&d.ID, &d.SubjectType, &d.SubjectID, &d.UploaderID, &d.UploaderName, &d.ClientVisible, &d.CreatedAt, &d.Filename, &d.ContentType, &d.ByteSize, &d.ContactID, &d.ContactName)
 		return d, err
 	})
 	if err != nil {
@@ -111,9 +115,13 @@ func (a *App) documentsJSON(ctx context.Context, where string, args ...any) ([]O
 		if d.UploaderID != 0 {
 			uploader = O("id", d.UploaderID, "name", d.UploaderName)
 		}
+		var contact any
+		if d.ContactID != 0 {
+			contact = O("id", d.ContactID, "name", d.ContactName)
+		}
 		out[i] = a.agentRef("Document", d.ID, "", d.Filename, path).
 			Set("filename", d.Filename).Set("byte_size", d.ByteSize).Set("content_type", d.ContentType).
-			Set("client_visible", d.ClientVisible).Set("created_at", d.CreatedAt).Set("uploaded_by", uploader).
+			Set("client_visible", d.ClientVisible).Set("created_at", d.CreatedAt).Set("uploaded_by", uploader).Set("uploaded_by_contact", contact).
 			Set("download_url", fmt.Sprintf("%s/api/documents/%d/file", a.BaseURL(), d.ID)).
 			Set("subject", O("type", d.SubjectType, "id", d.SubjectID))
 	}
@@ -147,12 +155,9 @@ func humanSize(n int64) string {
 
 func (a *App) createDocuments(c *Ctx) error {
 	ctx := c.R.Context()
-	c.R.Body = http.MaxBytesReader(c.W, c.R.Body, MaxUpload()+(10<<20))
-	if err := c.R.ParseMultipartForm(32 << 20); err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return &apierr.Error{Status: 422, Code: "refused", Message: "The upload is over the " + humanSize(MaxUpload()) + " limit."}
-		}
-		return apierr.BadRequest("Send the files as multipart/form-data.")
+	files, err := c.uploads()
+	if err != nil {
+		return err
 	}
 	defer func() { _ = c.R.MultipartForm.RemoveAll() }() // best-effort: temp files
 	record := c.R.FormValue("record")
@@ -163,55 +168,17 @@ func (a *App) createDocuments(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	var files []*multipart.FileHeader
-	for _, key := range []string{"files", "files[]", "document[files]", "document[files][]", "file"} {
-		files = append(files, c.R.MultipartForm.File[key]...)
-	}
-	files = slices.DeleteFunc(files, func(f *multipart.FileHeader) bool { return f.Filename == "" })
 	if len(files) == 0 {
 		return &apierr.Error{Status: 422, Code: "refused", Message: "Choose a file to upload."}
 	}
-	for _, f := range files {
-		if f.Size > MaxUpload() {
-			return &apierr.Error{Status: 422, Code: "invalid", Message: f.Filename + " is over the " + humanSize(MaxUpload()) + " limit."}
-		}
-	}
 	var ids []int64
-	var names []any
 	err = a.write(ctx, c.Actor, func(t *Tx) error {
 		var uploader any
 		if uid := c.Actor.UserID(); uid != 0 {
 			uploader = uid
 		}
-		for _, fh := range files {
-			f, err := fh.Open()
-			if err != nil {
-				return err
-			}
-			blob, err := t.putBlob(fh.Filename, fh.Header.Get("Content-Type"), f)
-			f.Close()
-			if errors.Is(err, errTooLarge) {
-				return &apierr.Error{Status: 422, Code: "invalid", Message: fh.Filename + " is over the " + humanSize(MaxUpload()) + " limit."}
-			} else if err != nil {
-				return err
-			}
-			now := store.Now().DB()
-			id, err := t.Insert(`INSERT INTO documents (documentable_type, documentable_id, uploaded_by_id, client_visible, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`,
-				typ, subjectID, uploader, now, now)
-			if err != nil {
-				return err
-			}
-			if err := t.attach("Document", id, "file", blob); err != nil {
-				return err
-			}
-			t.Reindex("Document", id)
-			ids = append(ids, id)
-			names = append(names, blob.Filename)
-		}
-		if slices.Contains(eventfulSubjects, typ) {
-			return t.Event(typ, subjectID, "document.added", map[string]any{"files": names})
-		}
-		return nil
+		ids, err = t.addDocuments(typ, subjectID, files, uploader, nil, false)
+		return err
 	})
 	if err != nil {
 		return err
@@ -222,6 +189,66 @@ func (a *App) createDocuments(c *Ctx) error {
 	}
 	c.Summary = pluralize(len(ids), "file") + " added."
 	return c.JSON(201, O("summary", c.Summary, "documents", docs))
+}
+
+// uploads are the files a multipart request sends, each within the upload
+// limit; the caller removes the form's temp files.
+func (c *Ctx) uploads() ([]*multipart.FileHeader, error) {
+	c.R.Body = http.MaxBytesReader(c.W, c.R.Body, MaxUpload()+(10<<20))
+	if err := c.R.ParseMultipartForm(32 << 20); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return nil, &apierr.Error{Status: 422, Code: "refused", Message: "The upload is over the " + humanSize(MaxUpload()) + " limit."}
+		}
+		return nil, apierr.BadRequest("Send the files as multipart/form-data.")
+	}
+	var files []*multipart.FileHeader
+	for _, key := range []string{"files", "files[]", "document[files]", "document[files][]", "file"} {
+		files = append(files, c.R.MultipartForm.File[key]...)
+	}
+	files = slices.DeleteFunc(files, func(f *multipart.FileHeader) bool { return f.Filename == "" })
+	for _, f := range files {
+		if f.Size > MaxUpload() {
+			_ = c.R.MultipartForm.RemoveAll()
+			return nil, &apierr.Error{Status: 422, Code: "invalid", Message: f.Filename + " is over the " + humanSize(MaxUpload()) + " limit."}
+		}
+	}
+	return files, nil
+}
+
+// addDocuments keeps files on a record, uploaded by a user or by the
+// client's contact (nil for neither), and records it in the history.
+func (t *Tx) addDocuments(typ string, subjectID int64, files []*multipart.FileHeader, user, contact any, visible bool) ([]int64, error) {
+	var ids []int64
+	var names []any
+	for _, fh := range files {
+		f, err := fh.Open()
+		if err != nil {
+			return nil, err
+		}
+		blob, err := t.putBlob(fh.Filename, fh.Header.Get("Content-Type"), f)
+		f.Close()
+		if errors.Is(err, errTooLarge) {
+			return nil, &apierr.Error{Status: 422, Code: "invalid", Message: fh.Filename + " is over the " + humanSize(MaxUpload()) + " limit."}
+		} else if err != nil {
+			return nil, err
+		}
+		now := store.Now().DB()
+		id, err := t.Insert(`INSERT INTO documents (documentable_type, documentable_id, uploaded_by_id, uploaded_by_contact_id, client_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			typ, subjectID, user, contact, visible, now, now)
+		if err != nil {
+			return nil, err
+		}
+		if err := t.attach("Document", id, "file", blob); err != nil {
+			return nil, err
+		}
+		t.Reindex("Document", id)
+		ids = append(ids, id)
+		names = append(names, blob.Filename)
+	}
+	if slices.Contains(eventfulSubjects, typ) {
+		return ids, t.Event(typ, subjectID, "document.added", map[string]any{"files": names})
+	}
+	return ids, nil
 }
 
 // document is one document; notFound when there's none.

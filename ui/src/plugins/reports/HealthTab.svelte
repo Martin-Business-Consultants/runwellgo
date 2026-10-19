@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // Health: every client scored, at risk first (or as the header sorts
   // them), with why, twelve weeks of activity, the last touch and the
   // counts behind the score, each a link to its list. How the score works
@@ -52,7 +53,7 @@
   </Collapsible.Root>
 
   {#if !clients.length}
-    <p class="text-muted-foreground py-6 text-center text-sm">No {session.term("client", 2).toLowerCase()} match these filters.</p>
+    <EmptyState variant="inline" icon="everyone">No {session.term("client", 2).toLowerCase()} match these filters.</EmptyState>
   {:else}
     <div class="overflow-x-auto rounded-lg border">
       <Table.Root>

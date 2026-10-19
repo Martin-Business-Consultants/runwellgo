@@ -11,6 +11,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import TiptapEditor from "$lib/components/TiptapEditor.svelte";
   import StatusBadge from "$lib/components/StatusBadge.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import AgreementDraft from "./AgreementDraft.svelte";
   import AgreementSent from "./AgreementSent.svelte";
   import { post } from "$lib/api.js";
@@ -37,7 +38,9 @@
 
 <div class="flex flex-col gap-4">
   {#if !e.agreement_versions.length}
-    <Card.Root><Card.Content><p class="text-muted-foreground text-sm">No agreement yet.</p></Card.Content></Card.Root>
+    <EmptyState icon="document" title="No agreement yet." description="Start one, then send it for approval.">
+      {#snippet actions()}{#if !e.closed}<Button variant="outline" size="sm" onclick={start}><Plus />{startLabel}</Button>{/if}{/snippet}
+    </EmptyState>
   {/if}
   {#each e.agreement_versions as v (v.id)}
     {#key JSON.stringify(v)}
@@ -49,7 +52,7 @@
     {/key}
   {/each}
 
-  {#if !e.closed && !hasDraft}
+  {#if !e.closed && !hasDraft && e.agreement_versions.length}
     <div class="flex justify-center"><Button variant="outline" size="sm" onclick={start}><Plus />{startLabel}</Button></div>
   {/if}
 

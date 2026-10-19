@@ -7,6 +7,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import Plus from "@lucide/svelte/icons/plus";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { get } from "$lib/api.js";
   import { toastError } from "$lib/toast.svelte.js";
   import { wc, summaryClass } from "./wc.js";
@@ -18,11 +19,21 @@
   });
 </script>
 
-<Card.Root>
-  <Card.Content class="flex flex-col gap-3">
-    {#if !data}
-      <Skeleton class="h-16" />
-    {:else if data.websites.length}
+{#snippet add()}
+  <Button href={`/websites/new?client_id=${record.id}`} variant="outline" size="sm"><Plus />Add a website</Button>
+{/snippet}
+
+{#if !data}
+  <Skeleton class="h-16" />
+{:else if !data.websites.length}
+  <EmptyState icon="world" title="No websites yet." description="Add one to keep how it’s set up (form emails, webhooks, sitemap, sign-off) in one place." actions={data.can_manage ? add : undefined} />
+{:else}
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Websites <span class="text-muted-foreground font-normal tabular-nums">{data.websites.length}</span></Card.Title>
+      {#if data.can_manage}<Card.Action>{@render add()}</Card.Action>{/if}
+    </Card.Header>
+    <Card.Content>
       <ul class="flex flex-col gap-3">
         {#each data.websites as s (s.id)}
           <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -33,11 +44,6 @@
           </li>
         {/each}
       </ul>
-    {:else}
-      <p class="text-muted-foreground text-sm">No websites yet: add one to keep how it’s set up (form emails, webhooks, sitemap, sign-off) in one place.</p>
-    {/if}
-    {#if data?.can_manage}
-      <div><Button href={`/websites/new?client_id=${record.id}`} variant="outline" size="sm"><Plus />Add a website</Button></div>
-    {/if}
-  </Card.Content>
-</Card.Root>
+    </Card.Content>
+  </Card.Root>
+{/if}

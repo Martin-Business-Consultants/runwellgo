@@ -75,7 +75,11 @@ func (a *App) noteRoutes(mux *http.ServeMux) {
 	a.handle(mux, "POST /api/notes", a.createNote, tool("add_note", "Add a note to a record",
 		note(`record: "Type:id" for a Client, Engagement, ScopeItem, Todo or Request (e.g. "Client:12"). @mention someone by writing their name; they are notified.`),
 		bodyParam("record", "string", `The record it goes on, "Type:id" (e.g. "Client:12").`, true),
-		body("note", `{body (required, rich text or plain), kind: call|meeting|email|internal, source, occurred_at}`, true)))
+		body("note", `{body (required, rich text or plain), kind: call|meeting|email|internal, source, occurred_at, client_visible: boolean (a request's note only: shows it to the client in their portal)}`, true)))
+	a.handle(mux, "PATCH /api/notes/{id}", a.updateNote, tool("set_note_visibility", "Share a request's note with the client, or stop sharing it",
+		note("Only a request's notes can be shared: the client sees them on the request in their portal, and can answer there."),
+		body("note", `{client_visible: boolean (required)}`, true),
+		confirm("Sharing shows the note to the client in their portal.")))
 	a.handle(mux, "DELETE /api/notes/{id}", a.destroyNote, tool("delete_note", "Delete a note",
 		note("Only its author (or the author's person, for a note their agent wrote) or someone who may delete records.")))
 }
@@ -132,17 +136,26 @@ type noteRow struct {
 	SubjectType, Body, Kind, Source        string
 	AuthorName                             string
 	OccurredAt                             store.Time
+	// ClientVisible is a request's note shared with the client; ContactID
+	// is the client's contact who wrote it in the portal.
+	ClientVisible bool
+	ContactID     int64
+	ContactName   string
 	// WrittenAs is the plugin's mentionable that wrote it ("ai:7"), for a
 	// reply to a mention (plugin_mentions.go).
 	WrittenAs string
 }
 
+// noteSelect reads notes as noteRow scans them.
+const noteSelect = `SELECT n.id, n.subject_type, n.subject_id, n.body, n.kind, n.source, n.occurred_at, COALESCE(n.author_id, 0),
+			COALESCE(NULLIF(u.name, ''), u.email_address, ''), COALESCE(u.agent_owner_id, 0), COALESCE(n.written_as, ''),
+			n.client_visible, COALESCE(n.contact_id, 0), COALESCE(ct.name, '')
+		FROM notes n LEFT JOIN users u ON u.id = n.author_id LEFT JOIN contacts ct ON ct.id = n.contact_id`
+
 // notesJSON are a record's notes, latest first (notes/_note.json); limit 0
 // is all of them.
 func (a *App) notesJSON(ctx context.Context, typ string, id int64, limit int) ([]Obj, error) {
-	q := `SELECT n.id, n.subject_type, n.subject_id, n.body, n.kind, n.source, n.occurred_at, COALESCE(n.author_id, 0),
-			COALESCE(NULLIF(u.name, ''), u.email_address, ''), COALESCE(u.agent_owner_id, 0), COALESCE(n.written_as, '')
-		FROM notes n LEFT JOIN users u ON u.id = n.author_id
+	q := noteSelect + `
 		WHERE n.subject_type = ? AND n.subject_id = ? ORDER BY n.occurred_at DESC, n.id DESC`
 	args := []any{typ, id}
 	if limit > 0 {
@@ -159,7 +172,7 @@ func (a *App) queryNotes(ctx context.Context, q string, args ...any) ([]Obj, err
 	}
 	notes, err := store.ScanAll(rows, func(r *sqlRows) (noteRow, error) {
 		var n noteRow
-		err := r.Scan(&n.ID, &n.SubjectType, &n.SubjectID, &n.Body, &n.Kind, &n.Source, &n.OccurredAt, &n.AuthorID, &n.AuthorName, &n.AuthorOwnerID, &n.WrittenAs)
+		err := r.Scan(&n.ID, &n.SubjectType, &n.SubjectID, &n.Body, &n.Kind, &n.Source, &n.OccurredAt, &n.AuthorID, &n.AuthorName, &n.AuthorOwnerID, &n.WrittenAs, &n.ClientVisible, &n.ContactID, &n.ContactName)
 		return n, err
 	})
 	if err != nil {
@@ -200,6 +213,10 @@ func (a *App) noteJSON(n noteRow, path string) Obj {
 	if n.AuthorID != 0 {
 		author = O("id", n.AuthorID, "name", n.AuthorName)
 	}
+	var contact any
+	if n.ContactID != 0 {
+		contact = O("id", n.ContactID, "name", n.ContactName)
+	}
 	source, owner := n.Source, nullableID(n.AuthorOwnerID)
 	if n.WrittenAs != "" {
 		author, source, owner = a.writtenAs(n, author)
@@ -208,7 +225,8 @@ func (a *App) noteJSON(n noteRow, path string) Obj {
 		Set("kind", n.Kind).Set("source", source).Set("occurred_at", n.OccurredAt).
 		Set("author", author).Set("body", agentTextOrNil(richTextHTML(n.Body))).Set("body_html", richTextHTML(n.Body)).
 		Set("subject", O("type", n.SubjectType, "id", n.SubjectID)).
-		Set("author_agent_owner_id", owner)
+		Set("author_agent_owner_id", owner).
+		Set("client_visible", n.ClientVisible).Set("contact", contact)
 }
 
 func nullableID(id int64) any {
@@ -273,6 +291,10 @@ func (a *App) createNote(c *Ctx) error {
 	if !slices.Contains(NoteKinds, kind) {
 		inv.Add("kind", "is not included in the list")
 	}
+	shared := boolOf(fields["client_visible"])
+	if shared && typ != "Request" {
+		inv.Add("client_visible", "is only for a request's notes")
+	}
 	if err := inv.Err(); err != nil {
 		return err
 	}
@@ -283,8 +305,8 @@ func (a *App) createNote(c *Ctx) error {
 		if uid := c.Actor.UserID(); uid != 0 {
 			author = uid
 		}
-		id, err = t.Insert(`INSERT INTO notes (subject_type, subject_id, body, kind, occurred_at, author_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			typ, subjectID, html, kind, occurred.DB(), author, source, now, now)
+		id, err = t.Insert(`INSERT INTO notes (subject_type, subject_id, body, kind, occurred_at, author_id, source, client_visible, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			typ, subjectID, html, kind, occurred.DB(), author, source, shared, now, now)
 		if err != nil {
 			return err
 		}
@@ -301,14 +323,52 @@ func (a *App) createNote(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	list, err := a.queryNotes(ctx, `SELECT n.id, n.subject_type, n.subject_id, n.body, n.kind, n.source, n.occurred_at, COALESCE(n.author_id, 0),
-			COALESCE(NULLIF(u.name, ''), u.email_address, ''), COALESCE(u.agent_owner_id, 0), COALESCE(n.written_as, '')
-		FROM notes n LEFT JOIN users u ON u.id = n.author_id WHERE n.id = ?`, id)
+	list, err := a.queryNotes(ctx, noteSelect+` WHERE n.id = ?`, id)
 	if err != nil {
 		return err
 	}
 	c.Summary = "Note added."
 	return c.JSON(201, O("summary", c.Summary, "note", list[0]))
+}
+
+// updateNote shares a request's note with the client, or stops sharing it.
+func (a *App) updateNote(c *Ctx) error {
+	id, err := c.IntParam("id")
+	if err != nil {
+		return err
+	}
+	body, err := c.Wrapped("note")
+	if err != nil {
+		return err
+	}
+	ctx := c.R.Context()
+	var typ string
+	if err := a.store.QueryRowContext(ctx, `SELECT subject_type FROM notes WHERE id = ?`, id).Scan(&typ); isNoRows(err) {
+		return notFound("note")
+	} else if err != nil {
+		return err
+	}
+	shared := boolOf(body["client_visible"])
+	if shared && typ != "Request" {
+		inv := apierr.Invalid{}
+		inv.Add("client_visible", "is only for a request's notes")
+		return inv.Err()
+	}
+	if err := a.write(ctx, c.Actor, func(t *Tx) error {
+		return t.update("notes", id, map[string]any{"client_visible": shared})
+	}); err != nil {
+		return err
+	}
+	list, err := a.queryNotes(ctx, noteSelect+` WHERE n.id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if shared {
+		c.Summary = "The client can see this note."
+	} else {
+		c.Summary = "Only your team sees this note."
+	}
+	return c.JSON(200, O("summary", c.Summary, "note", list[0]))
 }
 
 // noteDeletableBy is whether user may delete a note: its author, the

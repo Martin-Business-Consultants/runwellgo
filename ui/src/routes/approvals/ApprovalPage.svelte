@@ -42,7 +42,10 @@
     </div>
 
     {#if failed}
-      <Card.Root><Card.Content><p class="text-sm">{failed}</p></Card.Content></Card.Root>
+      <Card.Root>
+        <Card.Header><Card.Title><h1>Couldn’t open this approval</h1></Card.Title></Card.Header>
+        <Card.Content><p class="text-sm">{failed}</p></Card.Content>
+      </Card.Root>
     {:else if !data}
       <Skeleton class="h-64" />
     {:else}

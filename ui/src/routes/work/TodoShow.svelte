@@ -79,6 +79,7 @@
   <div class="grid gap-4 lg:grid-cols-3">
     <div class="flex min-w-0 flex-col gap-4 lg:col-span-2">
       <Card.Root>
+        <Card.Header><Card.Title>Description</Card.Title></Card.Header>
         <Card.Content>
           {#if todo.description_html}<RichText html={todo.description_html} />{:else}<p class="text-muted-foreground text-sm">No description.</p>{/if}
         </Card.Content>

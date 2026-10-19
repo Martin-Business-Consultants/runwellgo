@@ -1,5 +1,5 @@
 <script>
-  // A list table (shadcn's Table) in a bordered box: headers, rows that
+  // A list table (shadcn's Table) in a frame: headers, rows that
   // light up under the pointer, a tick column with select-all when rows can
   // be acted on in bulk, and an empty row that says why it's empty.
   //   <DataTable {columns} rows={pages} key="id" selectable bind:selected>
@@ -9,8 +9,10 @@
   // show(key)); density is compact or comfortable; the row whose key is
   // `editing` is drawn by the editor snippet across the table (Quick Edit).
   import * as Table from "$lib/components/ui/table/index.js";
+  import * as Frame from "$lib/components/ui/frame/index.js";
   import { Checkbox } from "$lib/components/ui/checkbox/index.js";
   import { setContext } from "svelte";
+  import EmptyState from "./EmptyState.svelte";
   let {
     columns = [],
     rows = [],
@@ -39,7 +41,7 @@
   const span = $derived(shown.length + (selectable ? 1 : 0));
 </script>
 
-<div class="min-w-0 overflow-hidden rounded-lg border {klass}">
+<Frame.Root class="min-w-0 {klass}">
   <Table.Root>
     <Table.Header>
       <Table.Row>
@@ -54,7 +56,7 @@
     <Table.Body>
       {#each rows as r (r[key])}
         {#if editor && editing != null && r[key] === editing}
-          <Table.Row class="bg-muted/40 hover:bg-muted/40">
+          <Table.Row>
             <Table.Cell colspan={span} class="whitespace-normal p-4">{@render editor(r)}</Table.Cell>
           </Table.Row>
         {:else}
@@ -71,11 +73,11 @@
         {/if}
       {:else}
         <Table.Row class="hover:bg-transparent">
-          <Table.Cell colspan={span} class="text-muted-foreground h-32 whitespace-normal text-center">
-            {#if empty}{@render empty()}{:else}{emptyText}{/if}
+          <Table.Cell colspan={span} class="text-muted-foreground whitespace-normal text-center">
+            {#if empty}{@render empty()}{:else}<EmptyState variant="inline" title={emptyText} />{/if}
           </Table.Cell>
         </Table.Row>
       {/each}
     </Table.Body>
   </Table.Root>
-</div>
+</Frame.Root>

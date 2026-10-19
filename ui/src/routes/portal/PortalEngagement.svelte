@@ -62,6 +62,7 @@
     <div class="grid gap-4 lg:grid-cols-3">
       <div class="flex min-w-0 flex-col gap-4 lg:col-span-2">
         <Card.Root>
+          <Card.Header><Card.Title>About this {portal.term("engagement").toLowerCase()}</Card.Title></Card.Header>
           <Card.Content class="flex flex-col gap-3">
             <div class="flex flex-wrap items-center gap-3">
               <Badge variant={e.active ? "default" : "secondary"}>{e.state_label}</Badge>

@@ -83,12 +83,13 @@ Appearance overrides them through `lib/appearance.svelte.js`):
 
 - **Color.** Runwell Indigo `#5D63CD` means "act here": primary buttons, links, focus, the current
   place. Never decoration. Ink `#1B1E2E` on white, slate `#5B6175` for quieter text, a cool mist
-  sidebar `#F5F6FA`, lines `#E3E5ED`; red `#C2362B` only for late or irreversible. Dark mode keeps
+  sidebar `#F5F6FA`, lines the ink at 10% (they sit as quietly on a tint as on white); red `#C2362B` only for late or irreversible. Dark mode keeps
   the hues on blue-black `#12141C`.
 - **Type.** Manrope (bundled), body 14px; headings 650–700 weight, slightly tight, sentence case;
   dates, counts and money in tabular figures. Scale: 12 / 13 / 14 / 16 / 20 / 24 / 30.
 - **One loud place.** Home's greeting and how much needs the person; everything else is quiet.
-- **Status is a word and a color**, never color alone. Borders over shadows. No all-caps eyebrows,
+- **Status is a word and a color**, never color alone. Borders over shadows (only the faint
+  `shadow-xs/5` and 1px inner highlight the components carry). No all-caps eyebrows,
   no arrows tacked onto buttons, no badge that repeats what the list already says.
 - **Quality floor.** Works at 390px wide with no sideways scroll (tab rows scroll themselves);
   every page has one `<main>` and one `<h1>` (indexes: `sr-only`, from the toolbar); every control
@@ -115,14 +116,27 @@ Appearance overrides them through `lib/appearance.svelte.js`):
   index and `QueryFilter` (`?param=`) for a list inside a page, such as a record's tab. (An index's
   `tabs` row, engagements' types or requests' sources, is the one place a filter is drawn as tabs.)
 - **Words.** The person's words (`session.term`), plain verbs, sentence case; an error says what
-  happened and what to do; an empty list says where its records come from.
+  happened and what to do; an empty list says where its records come from,
+  with `EmptyState` (messenger's: always an icon on a stack of cards, a title, a line, actions, in a
+  dashed box; `variant` "card" on its own, in a frame of its own unless it's already in a card,
+  frame or panel (`section` titles that frame), "inline" in a tab; parts in `$lib/components/ui/empty`).
 
-- **Vanilla shadcn-svelte.** Build screens from `$lib/components/ui/*` (Card, Table, Button,
+- **Frames.** The surfaces are messenger's (`../messenger`, coss ui): a section is a frame, a
+  tinted rim (`bg-muted/72 p-1 rounded-2xl`) holding its header and footer, its body a white panel.
+  A `Card.Root` with a `Card.Content` or a `Table.Root` straight inside draws as a frame by itself
+  (`card-framed`, in `app.css`); a card of only a header and footer (a link in a grid) stays one
+  solid surface. A table straight in a frame or card draws as cards (its head on the tint, its body
+  a panel); `DataTable` is a frame. A new section is one component, `$lib/components/Frame.svelte`
+  (`<Frame title description>` with `actions`/`footer` snippets, `flush` for a list edge to edge,
+  `bare` for a Table or several panels); `$lib/components/ui/frame` holds its parts (`Frame.Root`,
+  `.Panel`, `.Header`, `.Title`, `.Footer`) for layouts it doesn't cover.
+- **shadcn-svelte, in messenger's finish.** Build screens from `$lib/components/ui/*` (Card, Table, Button,
   Badge, Tabs, Dialog, Sheet, DropdownMenu, Field, Input, Select, Textarea, Checkbox, Switch,
   Popover + Calendar for dates, Command, Tooltip, Alert, Skeleton, Avatar, Breadcrumb…) and
   lucide icons (`import Plus from "@lucide/svelte/icons/plus"`), as the shadcn blocks and examples
   do. Tailwind utilities only; no custom CSS beyond `app.css`. Missing a shadcn component? Add it:
-  `npx shadcn-svelte@1.7.0 add <name>` (don't overwrite existing ones). The older helpers in
+  `npx shadcn-svelte@1.7.0 add <name>` (don't overwrite existing ones), then give it messenger's
+  classes (its `app/frontend/components/ui/*.jsx`, Base UI's states mapped to bits-ui's). The older helpers in
   `$lib/components/*.svelte` (DataTable, EmptyState, Time, Badge…) may be used where they fit.
 - **Layout.** The app is shadcn's sidebar layout (`lib/layout/AppSidebar.svelte`, `SiteHeader.svelte`).
   A screen sets its header with `page.set(title, [{label, href}])` (breadcrumbs: up a level, then

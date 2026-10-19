@@ -7,6 +7,7 @@ import PortalEngagement from "./PortalEngagement.svelte";
 import PortalWork from "./PortalWork.svelte";
 import PortalRequests from "./PortalRequests.svelte";
 import PortalRequestNew from "./PortalRequestNew.svelte";
+import PortalRequest from "./PortalRequest.svelte";
 import PortalConnectedApps from "./PortalConnectedApps.svelte";
 import PortalSignIn from "./PortalSignIn.svelte";
 import PortalSessionLink from "./PortalSessionLink.svelte";
@@ -23,6 +24,7 @@ export const publicRoutes = [
   ["/portal/me", PortalRedirect],
   ["/portal/requests", PortalRequests],
   ["/portal/requests/new", PortalRequestNew],
+  ["/portal/requests/:id", PortalRequest],
   ["/portal/connected_apps", PortalConnectedApps],
   ["/portal/session/new", PortalSignIn],
   ["/portal/session/:token", PortalSessionLink],

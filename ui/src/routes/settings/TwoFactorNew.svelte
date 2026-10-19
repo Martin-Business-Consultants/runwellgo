@@ -54,6 +54,7 @@
     <Skeleton class="h-80 w-full" />
   {:else}
     <Card.Root class="max-w-2xl">
+      <Card.Header><Card.Title>Connect an authenticator app</Card.Title></Card.Header>
       <Card.Content>
         <ol class="flex list-decimal flex-col gap-6 ps-5 text-sm">
           <li>Open an authenticator app: 1Password, Google Authenticator, Microsoft Authenticator, Authy or your phone’s built-in passwords app.</li>

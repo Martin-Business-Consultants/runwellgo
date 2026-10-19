@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // Home: what needs a person now, and how the business stands. The day
   // and a greeting; the first-run checklist, folded to its progress; the
   // three things side by side (clients, engagements, work: PulseCards);
@@ -213,7 +214,7 @@
           </Tabs.Root>
         </Card.Root>
         {#if !data.sections.length}
-          <Card.Root><Card.Content class="text-muted-foreground py-8 text-center text-sm">Nothing needs you right now.</Card.Content></Card.Root>
+          <EmptyState icon="check-circle" title="Nothing needs you right now." />
         {/if}
       </Tabs.Content>
       <Tabs.Content value="engagements">
@@ -237,7 +238,7 @@
           </div>
           <p class="mt-3 text-sm"><a href="/engagements" class="text-muted-foreground hover:underline">All {session.term("engagement", 2).toLowerCase()}</a></p>
         {:else}
-          <Card.Root><Card.Content class="text-muted-foreground py-8 text-center text-sm">None of yours are running. <a href="/engagements" class="text-foreground underline-offset-4 hover:underline">All {session.term("engagement", 2).toLowerCase()}</a></Card.Content></Card.Root>
+          <EmptyState icon="briefcase" title="None of yours are running."><a href="/engagements">All {session.term("engagement", 2).toLowerCase()}</a></EmptyState>
         {/if}
       </Tabs.Content>
       <Tabs.Content value="trend"><PulseChart weeks={pulse.weeks} /></Tabs.Content>

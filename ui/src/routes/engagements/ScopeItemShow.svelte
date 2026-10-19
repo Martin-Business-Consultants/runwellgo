@@ -6,6 +6,7 @@
   import * as Tabs from "$lib/components/ui/tabs/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import StatusBadge from "$lib/components/StatusBadge.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { get } from "$lib/api.js";
   import { page } from "$lib/page.svelte.js";
   import { session } from "$lib/session.svelte.js";
@@ -48,23 +49,21 @@
         </Tabs.List>
         {#each tabs as t (t.key)}
           <Tabs.Content value={t.key} class="mt-2">
-            {#if t.key === "work"}
+            {#if t.key === "work" && !item.work.length}
+              <EmptyState icon="check-square" title={`No ${session.term("work").toLowerCase()} under this yet.`} description={`${session.term("work")} shows here once it’s put under this ${session.term("scope_item").toLowerCase()}.`} />
+            {:else if t.key === "work"}
               <Card.Root>
                 <Card.Content>
-                  {#if item.work.length}
-                    <ul class="flex flex-col gap-2 text-sm">
-                      {#each item.work as w (w.id)}
-                        <li class="flex items-center gap-2">
-                          <a href={`/work/${w.id}`} class="min-w-0 flex-1 truncate hover:underline">{w.title}</a>
-                          {#if w.owner}<span class="text-muted-foreground text-xs">{w.owner.name}</span>{/if}
-                          {#if w.due_on}<span class={w.overdue ? "text-destructive text-xs" : "text-muted-foreground text-xs"}>{date(w.due_on)}</span>{/if}
-                          <StatusBadge status={w.status} />
-                        </li>
-                      {/each}
-                    </ul>
-                  {:else}
-                    <p class="text-muted-foreground text-sm">No work under this yet.</p>
-                  {/if}
+                  <ul class="flex flex-col gap-2 text-sm">
+                    {#each item.work as w (w.id)}
+                      <li class="flex items-center gap-2">
+                        <a href={`/work/${w.id}`} class="min-w-0 flex-1 truncate hover:underline">{w.title}</a>
+                        {#if w.owner}<span class="text-muted-foreground text-xs">{w.owner.name}</span>{/if}
+                        {#if w.due_on}<span class={w.overdue ? "text-destructive text-xs" : "text-muted-foreground text-xs"}>{date(w.due_on)}</span>{/if}
+                        <StatusBadge status={w.status} />
+                      </li>
+                    {/each}
+                  </ul>
                 </Card.Content>
               </Card.Root>
             {:else}

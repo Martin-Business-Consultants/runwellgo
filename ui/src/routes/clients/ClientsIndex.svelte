@@ -67,9 +67,9 @@
   <NoMatches />
 {:else if !data.clients.length}
   {#if data.filters.at(-1).count}
-    <EmptyState title={`No ${data.status} ${session.term("client", 2).toLowerCase()}.`}><a class="underline-offset-4 hover:underline" href={href("/clients", { status: "all", view: router.query.get("view") })}>Show all</a></EmptyState>
+    <EmptyState icon="everyone" title={`No ${data.status} ${session.term("client", 2).toLowerCase()}.`}><a class="underline-offset-4 hover:underline" href={href("/clients", { status: "all", view: router.query.get("view") })}>Show all</a></EmptyState>
   {:else}
-    <EmptyState title={`No ${session.term("client", 2).toLowerCase()} yet.`}>
+    <EmptyState icon="everyone" title={`No ${session.term("client", 2).toLowerCase()} yet.`}>
       {#snippet actions()}<Button href="/clients/new" variant="outline">Add your first {session.term("client").toLowerCase()}</Button>{/snippet}
     </EmptyState>
   {/if}

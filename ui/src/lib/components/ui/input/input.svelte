@@ -1,3 +1,11 @@
+<script module>
+	// Messenger wraps the field in a styled span; here the surface sits on
+	// the <input> itself, so callers keep bind:value and their classes on it.
+	// (An <input> can't carry the ::before highlight, so it keeps the shadow.)
+	export const inputClass =
+		"h-9 w-full min-w-0 rounded-lg border border-input bg-background not-dark:bg-clip-padding px-[calc(--spacing(3)-1px)] text-base text-foreground shadow-xs/5 ring-ring/24 outline-none [transition:box-shadow_.15s,border-color_.15s,background-color_5000000s_ease-in-out_0s] placeholder:text-muted-foreground/72 autofill:[-webkit-text-fill-color:var(--foreground)] focus-visible:border-ring focus-visible:ring-[3px] aria-invalid:border-destructive/36 focus-visible:aria-invalid:border-destructive/64 focus-visible:aria-invalid:ring-destructive/16 disabled:cursor-not-allowed disabled:opacity-64 [&:is(:disabled,:focus-visible,[aria-invalid=true])]:shadow-none sm:h-8 sm:text-sm dark:bg-input/32 dark:aria-invalid:ring-destructive/24";
+</script>
+
 <script>
 	import { cn } from "$lib/utils.js";
 	let {
@@ -16,7 +24,8 @@
 		bind:this={ref}
 		data-slot={dataSlot}
 		class={cn(
-			"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 h-9 rounded-md border bg-transparent px-2.5 py-1 text-base shadow-xs transition-[color,box-shadow] file:h-7 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+			inputClass,
+			"leading-8.5 text-muted-foreground sm:leading-7.5 file:me-3 file:h-full file:border-0 file:bg-transparent file:font-medium file:text-foreground file:text-sm",
 			className
 		)}
 		type="file"
@@ -29,7 +38,9 @@
 		bind:this={ref}
 		data-slot={dataSlot}
 		class={cn(
-			"dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 h-9 rounded-md border bg-transparent px-2.5 py-1 text-base shadow-xs transition-[color,box-shadow] file:h-7 file:text-sm file:font-medium focus-visible:ring-3 aria-invalid:ring-3 md:text-sm w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+			inputClass,
+			type === "search" &&
+				"[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-webkit-search-results-button]:appearance-none [&::-webkit-search-results-decoration]:appearance-none",
 			className
 		)}
 		{type}

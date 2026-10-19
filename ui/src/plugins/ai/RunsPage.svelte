@@ -9,6 +9,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import FilterMenu from "$lib/components/FilterMenu.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import AgentAvatar from "./AgentAvatar.svelte";
   import { staff } from "./ai.svelte.js";
   import { router, href, onQuery, go, withQuery } from "$lib/router.svelte.js";
@@ -40,7 +41,11 @@
       {/if}
     </div>
     {#if !data.runs.length}
-      <Card.Root><Card.Content class="text-muted-foreground text-sm">No runs{router.query.size ? " match" : " yet: mention an agent with @ in a note or in chat"}.</Card.Content></Card.Root>
+      {#if router.query.size}
+        <EmptyState icon="ai" title="No runs match." description="Try another agent, status or person." />
+      {:else}
+        <EmptyState icon="ai" title="No runs yet." description="Mention an agent with @ in a note or in chat, and its run shows here." />
+      {/if}
     {:else}
       <Card.Root class="py-0">
         <Table.Root>

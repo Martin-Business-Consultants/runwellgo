@@ -5,7 +5,6 @@
   // The page opens on the first step still to do (or ?item=); picking a step
   // keeps the address, so it can be shared.
   import * as Card from "$lib/components/ui/card/index.js";
-  import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
@@ -98,6 +97,19 @@
 
   <div class="grid items-start gap-4 lg:grid-cols-2">
     <Card.Root>
+      <Card.Header>
+        <Card.Title>Steps <span class="text-muted-foreground font-normal tabular-nums">{site.items.length}</span></Card.Title>
+        <Card.Action><Button variant="outline" size="sm" aria-expanded={addOpen} aria-controls="website-add-item" onclick={() => (addOpen = !addOpen)}><Plus />Add an item</Button></Card.Action>
+      </Card.Header>
+      {#if addOpen}
+        <Card.Content>
+          <form id="website-add-item" onsubmit={addItem} class="flex flex-col gap-2">
+            <Input bind:value={added.title} placeholder="What to check" required maxlength={200} autocomplete="off" aria-label="What to check" />
+            <Input bind:value={added.value} placeholder="Its value, if you know it" autocomplete="off" aria-label="Value" />
+            <div><Button type="submit" size="sm">Add</Button></div>
+          </form>
+        </Card.Content>
+      {/if}
       <Card.Content class="flex flex-col gap-5">
         {#each groups as g (g.group)}
           {@const sum = groupSummary(g.items)}
@@ -125,17 +137,6 @@
             </nav>
           </section>
         {/each}
-
-        <Collapsible.Root bind:open={addOpen}>
-          <Collapsible.Trigger>{#snippet child({ props })}<Button {...props} variant="outline" size="sm"><Plus />Add an item</Button>{/snippet}</Collapsible.Trigger>
-          <Collapsible.Content>
-            <form onsubmit={addItem} class="mt-2 flex flex-col gap-2">
-              <Input bind:value={added.title} placeholder="What to check" required maxlength={200} autocomplete="off" aria-label="What to check" />
-              <Input bind:value={added.value} placeholder="Its value, if you know it" autocomplete="off" aria-label="Value" />
-              <div><Button type="submit" size="sm">Add</Button></div>
-            </form>
-          </Collapsible.Content>
-        </Collapsible.Root>
       </Card.Content>
     </Card.Root>
 

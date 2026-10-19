@@ -68,9 +68,12 @@
         </div>
         {#if data.waiting}
           <Card.Root class="border-primary/40">
-            <Card.Content class="flex flex-row flex-wrap items-center gap-3 text-sm">
-              <span class="flex-1">It proposed a change that waits for {data.can_decide ? "you" : r.user.name} to approve or decline it.</span>
-              <Button size="sm" href="/ai/approvals">Open Approvals</Button>
+            <Card.Header>
+              <Card.Title>Waiting for approval</Card.Title>
+              <Card.Action><Button size="sm" href="/ai/approvals">Open Approvals</Button></Card.Action>
+            </Card.Header>
+            <Card.Content class="text-sm">
+              <p>It proposed a change that waits for {data.can_decide ? "you" : r.user.name} to approve or decline it.</p>
             </Card.Content>
           </Card.Root>
         {/if}
@@ -121,9 +124,12 @@
         </Card.Root>
         {#if data.can_cancel}
           <Card.Root>
-            <Card.Content class="flex flex-col items-start gap-2 text-sm">
-              <p class="text-muted-foreground">It’s still going. Cancel it to stop it where it is.</p>
-              <Button variant="outline" size="sm" onclick={cancel}>Cancel the run</Button>
+            <Card.Header>
+              <Card.Title>Still going</Card.Title>
+              <Card.Action><Button variant="outline" size="sm" onclick={cancel}>Cancel the run</Button></Card.Action>
+            </Card.Header>
+            <Card.Content class="text-sm">
+              <p class="text-muted-foreground">Cancel it to stop it where it is.</p>
             </Card.Content>
           </Card.Root>
         {/if}

@@ -9,6 +9,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import Download from "@lucide/svelte/icons/download";
   import PersonAvatar from "$lib/components/PersonAvatar.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { get } from "$lib/api.js";
   import { page } from "$lib/page.svelte.js";
   import { router, href, withQuery, onQuery } from "$lib/router.svelte.js";
@@ -44,7 +45,7 @@
 {#if !data}
   <Skeleton class="h-48" />
 {:else if !data.audits.length}
-  <Card.Root><Card.Content class="text-muted-foreground text-sm">No changes yet. Every change to {what} shows here: who made it, when, and what it was before and after.</Card.Content></Card.Root>
+  <EmptyState icon="history" title="No changes yet." description={`Every change to ${what} shows here: who made it, when, and what it was before and after.`} />
 {:else}
   <Card.Root class="py-0">
     <Table.Root>

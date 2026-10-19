@@ -43,15 +43,16 @@
   </form>
 
   {#if !query}
-    <EmptyState title="Search everything">
+    <EmptyState icon="search" title="Search everything">
       Search {session.term("client", 2).toLowerCase()}, contacts, {session.term("engagement", 2).toLowerCase()}, requests, {session.term("work", 2).toLowerCase()}, {session.term("commitment", 2).toLowerCase()}, notes and documents
     </EmptyState>
   {:else if loading && !results.length}
     <Skeleton class="h-48" />
   {:else if !results.length}
-    <EmptyState title="No matches">Nothing matches “{query}”.</EmptyState>
+    <EmptyState icon="search" title="No matches">Nothing matches “{query}”.</EmptyState>
   {:else}
     <Card.Root>
+      <Card.Header><Card.Title>Results <span class="text-muted-foreground font-normal tabular-nums">{results.length}</span></Card.Title></Card.Header>
       <Card.Content>
         <ul class="flex flex-col divide-y">
           {#each results as r, i (r.type + r.id + i)}

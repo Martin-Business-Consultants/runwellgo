@@ -83,7 +83,7 @@
       </Card.Header>
       <Card.Content>
         {#if !data.unread.length}
-          <EmptyState title="Nothing new for you"><BellOff class="mx-auto size-5" /></EmptyState>
+          <EmptyState icon={BellOff} title="Nothing new for you" />
         {:else}
           <ul class="flex flex-col divide-y">{#each data.unread as n (n.id)}{@render item(n)}{/each}</ul>
         {/if}

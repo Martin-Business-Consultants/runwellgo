@@ -100,9 +100,9 @@
   <NoMatches />
 {:else if !data.engagements.length}
   {#if data.filters.at(-1).count}
-    <EmptyState title={`No ${noun} match.`}><a class="underline-offset-4 hover:underline" href={href("/engagements", { state: "all", view: router.query.get("view") })}>Show all</a></EmptyState>
+    <EmptyState icon="briefcase" title={`No ${noun} match.`}><a class="underline-offset-4 hover:underline" href={href("/engagements", { state: "all", view: router.query.get("view") })}>Show all</a></EmptyState>
   {:else}
-    <EmptyState title={`No ${noun} yet.`}>
+    <EmptyState icon="briefcase" title={`No ${noun} yet.`}>
       {#snippet actions()}<Button href="/engagements/new" variant="outline">Start your first {session.term("engagement").toLowerCase()}</Button>{/snippet}
     </EmptyState>
   {/if}

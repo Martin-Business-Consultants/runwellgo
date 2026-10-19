@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // The portal's home: everything agreed with the client, and where each one
   // stands.
   import * as Card from "$lib/components/ui/card/index.js";
@@ -22,7 +23,7 @@
   {#if !engagements}
     <Skeleton class="h-40" />
   {:else if !engagements.length}
-    <Card.Root><Card.Content class="text-muted-foreground py-10 text-center text-sm">No agreements yet.</Card.Content></Card.Root>
+    <EmptyState icon="document" title="No agreements yet." />
   {:else}
     <Card.Root>
       <Card.Header><Card.Description>Everything we have agreed with you, and where each one stands.</Card.Description></Card.Header>

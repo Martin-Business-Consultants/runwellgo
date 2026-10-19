@@ -10,6 +10,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
   import { Progress } from "$lib/components/ui/progress/index.js";
+  import * as Empty from "$lib/components/ui/empty/index.js";
   import Upload from "@lucide/svelte/icons/upload";
   import Download from "@lucide/svelte/icons/download";
   import ExternalLink from "@lucide/svelte/icons/external-link";
@@ -93,15 +94,27 @@
 </script>
 
 <Card.Root>
-  <Card.Content class="flex flex-col gap-4">
+  <Card.Header>
+    <Card.Title>Documents{#if documents.length} <span class="text-muted-foreground font-normal tabular-nums">{documents.length}</span>{/if}</Card.Title>
+    <Card.Action><Button variant="outline" size="sm" onclick={() => input?.click()}><Upload />Add files</Button></Card.Action>
+  </Card.Header>
+  <Card.Content>
+    <!-- The drop box (messenger's upload field). With nothing uploaded yet
+         it's the empty state too: what goes here and how. -->
     <label
-      class="border-input hover:bg-muted/50 flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 border-dashed px-4 py-6 text-center text-sm transition-colors {dragging ? 'border-primary bg-muted/50' : ''}"
+      class="hover:bg-muted/50 flex w-full cursor-pointer flex-col items-center gap-1 rounded-xl border border-dashed text-center text-sm transition-colors {documents.length ? 'px-4 py-6' : 'px-6 py-10'} {dragging ? 'border-primary bg-muted/50' : ''}"
       ondragover={(e) => { e.preventDefault(); dragging = true; }}
       ondragleave={() => (dragging = false)}
       ondrop={drop}>
-      <Upload class="text-muted-foreground size-5" />
-      <span class="font-medium">Drop files here, or click to choose</span>
-      <span class="text-muted-foreground text-xs">They start internal: only your team sees them.</span>
+      {#if documents.length}
+        <Upload class="text-muted-foreground size-5" />
+        <span class="font-medium">Drop files here, or click to choose</span>
+        <span class="text-muted-foreground text-xs">They start internal: only your team sees them.</span>
+      {:else}
+        <Empty.Media variant="icon" class="bg-muted text-muted-foreground mb-2 size-10 rounded-xl border"><Upload class="size-4.5" /></Empty.Media>
+        <span class="font-semibold">No documents yet.</span>
+        <span class="text-muted-foreground max-w-sm text-[13px]">Drop files here, or click to choose. They start internal: only your team sees them.</span>
+      {/if}
       <input bind:this={input} type="file" multiple class="sr-only" onchange={(e) => upload(e.currentTarget.files)} />
     </label>
 
@@ -116,9 +129,10 @@
       </ul>
     {/if}
 
-    {#if !documents.length}
-      <p class="text-muted-foreground text-sm">No documents yet.</p>
-    {:else}
+  </Card.Content>
+
+  {#if documents.length}
+    <Card.Content>
       <ul class="flex flex-col divide-y">
         {#each documents as d (d.id)}
           <li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
@@ -127,7 +141,7 @@
               <span class="min-w-0 flex-1 text-start">
                 <span class="block truncate text-sm font-medium">{d.filename}</span>
                 <span class="text-muted-foreground flex items-center gap-1 truncate text-xs">
-                  {bytes(d.byte_size)}{#if d.uploaded_by} · <PersonAvatar person={d.uploaded_by} size="size-4" />{/if} · {timeAgo(d.created_at)}
+                  {bytes(d.byte_size)}{#if d.uploaded_by} · <PersonAvatar person={d.uploaded_by} size="size-4" />{:else if d.uploaded_by_contact} · {d.uploaded_by_contact.name}, from the client{/if} · {timeAgo(d.created_at)}
                 </span>
               </span>
             {/snippet}
@@ -155,9 +169,9 @@
           </li>
         {/each}
       </ul>
-      <p class="text-muted-foreground text-xs">The switch shows a file to the client in their portal.</p>
-    {/if}
-  </Card.Content>
+    </Card.Content>
+    <Card.Footer class="text-muted-foreground text-xs">The switch shows a file to the client in their portal.</Card.Footer>
+  {/if}
 </Card.Root>
 
 <Dialog.Root open={!!preview} onOpenChange={(o) => { if (!o) preview = null; }}>

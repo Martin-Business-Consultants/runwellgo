@@ -48,11 +48,11 @@
   {#if stats.length}
     <section aria-label="At a glance" class="grid grid-cols-2 gap-3 lg:grid-cols-4 print:grid-cols-4">
       {#each stats as s (s.label)}
-        <Card.Root class="gap-1 py-4 print:break-inside-avoid print:shadow-none">
-          <Card.Content class="px-4">
-            <p class="text-muted-foreground text-sm">{s.label}</p>
+        <Card.Root class="card-framed:h-full print:break-inside-avoid print:shadow-none">
+          <Card.Header><Card.Title>{s.label}</Card.Title></Card.Header>
+          <Card.Content class="flex-1 gap-0.5 px-4 py-3">
             <p class="text-2xl font-bold tracking-tight tabular-nums">{s.value}</p>
-            {#if s.hint}<p class="text-muted-foreground mt-0.5 text-xs">{s.hint}</p>{/if}
+            {#if s.hint}<p class="text-muted-foreground text-xs">{s.hint}</p>{/if}
           </Card.Content>
         </Card.Root>
       {/each}

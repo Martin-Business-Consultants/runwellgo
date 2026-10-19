@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // What we're working on for the client across every agreement: the work
   // shared with them, by due date.
   import * as Card from "$lib/components/ui/card/index.js";
@@ -22,7 +23,7 @@
   {#if !work}
     <Skeleton class="h-40" />
   {:else if !work.length}
-    <Card.Root><Card.Content class="text-muted-foreground py-10 text-center text-sm">No work to show yet.</Card.Content></Card.Root>
+    <EmptyState icon="check-square" title="No work to show yet." />
   {:else}
     <Card.Root>
       <Card.Header><Card.Description>What we are working on for you across every agreement.</Card.Description></Card.Header>

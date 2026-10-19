@@ -20,6 +20,7 @@
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import Combobox from "$lib/components/Combobox.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import Plus from "@lucide/svelte/icons/plus";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import Bot from "@lucide/svelte/icons/bot";
@@ -112,20 +113,15 @@
   {#if !data}
     <Skeleton class="h-48 w-full" />
   {:else if !data.agents.length}
-    <Card.Root>
-      <Card.Content class="flex flex-col items-start gap-3 text-sm">
-        <Bot class="text-muted-foreground size-6" />
-        <p class="font-medium">No agents yet.</p>
-        <p class="text-muted-foreground">Make one, say a researcher who reads a record and sums it up, and mention it with @ in a note or in chat.</p>
-        <Button size="sm" onclick={() => edit()}><Plus />New agent</Button>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState icon={Bot} title="No agents yet." description="Make one, say a researcher who reads a record and sums it up, and mention it with @ in a note or in chat.">
+      {#snippet actions()}<Button size="sm" onclick={() => edit()}><Plus />New agent</Button>{/snippet}
+    </EmptyState>
   {:else}
     <ul class="grid gap-3 md:grid-cols-2">
       {#each data.agents as a (a.id)}
         <li>
-          <Card.Root class="h-full">
-            <Card.Content class="flex flex-row items-start gap-3">
+          <Card.Root class="card-framed:h-full">
+            <Card.Content class="flex flex-1 flex-row items-start gap-3">
               <AgentAvatar agent={a} size="size-10" />
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">

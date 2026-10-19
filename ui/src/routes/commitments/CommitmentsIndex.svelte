@@ -76,7 +76,7 @@
 {:else if !list.length && router.query.get("q")}
   <NoMatches />
 {:else if !list.length}
-  <EmptyState title={data.state === "open" ? `No open ${words}.` : "Nothing resolved yet."}>
+  <EmptyState icon="check-circle" title={data.state === "open" ? `No open ${words}.` : "Nothing resolved yet."}>
     {#if !data.any_commitments}
       A {session.term("commitment").toLowerCase()} is a promise with a date between you and the people you work for: something they’ll send you, or something you’ve told them they’ll have. Add one from a {session.term("client").toLowerCase()} or {session.term("engagement").toLowerCase()} page, or triage a request into one.
     {/if}

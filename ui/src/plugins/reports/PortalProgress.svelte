@@ -1,7 +1,7 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // The portal's "Your progress": the client's own report (what the owner
   // chose to show them), printable or saved as a PDF from the browser.
-  import * as Card from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Skeleton } from "$lib/components/ui/skeleton/index.js";
   import Printer from "@lucide/svelte/icons/printer";
@@ -19,7 +19,7 @@
 
 <PortalLayout title="Your progress">
   {#if missing}
-    <Card.Root><Card.Content class="text-muted-foreground py-10 text-center text-sm">There’s no progress report here. <a class="text-primary underline-offset-4 hover:underline" href="/portal">See your {portal.term("engagement", 2).toLowerCase()}</a>.</Card.Content></Card.Root>
+    <EmptyState icon="activity" title="There’s no progress report here."><a href="/portal">See your {portal.term("engagement", 2).toLowerCase()}</a></EmptyState>
   {:else if !report}
     <Skeleton class="h-24" /><Skeleton class="h-64" />
   {:else}

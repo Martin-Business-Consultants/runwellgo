@@ -5,10 +5,11 @@
 	let {
 		ref = $bindable(null),
 		class: className,
-		sideOffset = 0,
+		sideOffset = 4,
 		side = "top",
 		children,
-		arrowClasses,
+		// Messenger's tooltips have no arrow; still taken so callers that pass it don't break.
+		arrowClasses: _arrowClasses,
 		portalProps,
 		...restProps
 	} = $props();
@@ -21,22 +22,11 @@
 		{sideOffset}
 		{side}
 		class={cn(
-			"data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm z-50 w-fit max-w-xs origin-(--bits-tooltip-content-transform-origin) bg-foreground text-background",
+			"data-open:animate-in data-open:fade-in-0 data-open:zoom-in-98 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-98 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-98 relative inline-flex items-center gap-1.5 text-balance rounded-md border bg-popover not-dark:bg-clip-padding text-popover-foreground px-2 py-1 text-xs shadow-md/5 before:rounded-[calc(var(--radius-md)-1px)] before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)] has-data-[slot=kbd]:pr-1.5 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm z-50 w-fit max-w-xs origin-(--bits-tooltip-content-transform-origin)",
 			className
 		)}
 		{...restProps}
 	>
 		{@render children?.()}
-		<TooltipPrimitive.Arrow>
-			{#snippet child({ props })}
-				<div
-					class={cn(
-						"size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] z-50 bg-foreground fill-foreground data-[side=bottom]:-translate-x-1/2 data-[side=bottom]:-translate-y-[calc(-50%_+_1px)] data-[side=left]:-translate-y-[calc(50%_-_3px)] data-[side=right]:translate-x-[calc(50%_+_2px)] data-[side=right]:translate-y-1/2 data-[side=top]:translate-x-1/2 data-[side=top]:translate-y-[calc(-50%_+_2px)]",
-						arrowClasses
-					)}
-					{...props}
-				></div>
-			{/snippet}
-		</TooltipPrimitive.Arrow>
 	</TooltipPrimitive.Content>
 </TooltipPortal>

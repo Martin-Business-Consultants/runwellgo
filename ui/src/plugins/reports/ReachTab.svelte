@@ -1,4 +1,5 @@
 <script>
+  import EmptyState from "$lib/components/EmptyState.svelte";
   // Reach: where clients are, by country and by time zone (with the time
   // there now), how far the farthest is, how many are on the map for real,
   // and new clients by month.
@@ -23,11 +24,11 @@
 </script>
 
 {#snippet stat(label, value, hint)}
-  <Card.Root class="gap-1 py-4">
-    <Card.Content class="px-4">
-      <p class="text-muted-foreground text-sm">{label}</p>
+  <Card.Root class="card-framed:h-full">
+    <Card.Header><Card.Title>{label}</Card.Title></Card.Header>
+    <Card.Content class="flex-1 gap-0.5 px-4 py-3">
       <p class="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
-      {#if hint}<p class="text-muted-foreground mt-0.5 text-xs">{hint}</p>{/if}
+      {#if hint}<p class="text-muted-foreground text-xs">{hint}</p>{/if}
     </Card.Content>
   </Card.Root>
 {/snippet}
@@ -100,7 +101,7 @@
               </BarChart>
             </Chart.Container>
           {:else}
-            <p class="text-muted-foreground py-6 text-center text-sm">No one new in the last 12 months.</p>
+            <EmptyState variant="inline" icon="everyone">No one new in the last 12 months.</EmptyState>
           {/if}
         </Card.Content>
       </Card.Root>

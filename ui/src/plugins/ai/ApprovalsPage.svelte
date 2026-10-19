@@ -12,6 +12,7 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import CheckCheck from "@lucide/svelte/icons/check-check";
   import IndexToolbar from "$lib/components/IndexToolbar.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import ApprovalMarkdown from "./ApprovalMarkdown.svelte";
   import AiText from "./AiText.svelte";
   import { staff } from "./ai.svelte.js";
@@ -69,13 +70,7 @@
 {#if !data}
   <Skeleton class="h-40 w-full" />
 {:else if !data.approvals.length}
-  <Card.Root>
-    <Card.Content class="flex flex-col items-start gap-2 text-sm">
-      <CheckCheck class="text-muted-foreground size-6" />
-      <p class="font-medium">Nothing waits on you.</p>
-      <p class="text-muted-foreground">Changes your agents and Ask propose land here, as does anything another plugin needs a person to approve, like a pull request a runner opened.</p>
-    </Card.Content>
-  </Card.Root>
+  <EmptyState icon={CheckCheck} title="Nothing waits on you." description="Changes your agents and Ask propose land here, as does anything another plugin needs a person to approve, like a pull request a runner opened." />
 {:else}
   <p class="text-muted-foreground mb-3 hidden text-xs sm:block">j and k move between them, Enter approves, x declines.</p>
   <ul class="flex flex-col gap-3">

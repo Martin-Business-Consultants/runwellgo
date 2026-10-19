@@ -30,7 +30,10 @@
     <Skeleton class="h-32" />
   {:else}
     {#if settingsScreen}
-      <Card.Root><Card.Content><PluginScreen plugin={p.key} screen={settingsScreen} /></Card.Content></Card.Root>
+      <Card.Root>
+        <Card.Header><Card.Title>Settings</Card.Title></Card.Header>
+        <Card.Content><PluginScreen plugin={p.key} screen={settingsScreen} /></Card.Content>
+      </Card.Root>
     {/if}
     <Card.Root>
       <Card.Header>

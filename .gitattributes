@@ -1,0 +1,3 @@
+# The built app (make ui) is committed so the binary builds without Node;
+# mark it generated so diffs and PRs fold it away.
+internal/admin/dist/** linguist-generated=true -diff

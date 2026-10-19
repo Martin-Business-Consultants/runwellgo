@@ -98,7 +98,7 @@
 {:else if !data.requests.length && router.query.get("q")}
   <NoMatches />
 {:else if !data.requests.length}
-  <EmptyState title="No requests match.">
+  <EmptyState icon="inbox" title="No requests match.">
     {#if data.status !== "all"}<a class="underline-offset-4 hover:underline" href={href("/requests", { status: "all", view: router.query.get("view") })}>Show all</a>{/if}
   </EmptyState>
 {:else if view === "table"}
