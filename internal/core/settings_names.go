@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Settings › Names (what things are called, prices, starting setups),

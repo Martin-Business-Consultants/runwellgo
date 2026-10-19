@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
 )
 
 // Forgot your password: the emailed link (good once, for 15 minutes) opens

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // What the one-off commands do (runwell user …), outside any request.

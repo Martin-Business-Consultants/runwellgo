@@ -15,7 +15,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
 )
 
 // The agent surface: the tools an AI agent (or a person at a terminal) uses

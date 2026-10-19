@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Avatars: a person's picture (their "avatar" attachment), else their

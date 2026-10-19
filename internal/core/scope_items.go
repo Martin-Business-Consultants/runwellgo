@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Scope items: the lines of what we agreed, on an agreement version. They

@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/outbound"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/outbound"
 )
 
 const (

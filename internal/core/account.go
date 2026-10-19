@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Settings › Your account, for everyone: choices that are yours alone, not

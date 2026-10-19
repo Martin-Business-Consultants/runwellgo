@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Signing in by emailed link, for people who switched it on (Settings ›

@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/mail"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/mail"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Settings › Email: who the install's mail comes from, the outgoing mail

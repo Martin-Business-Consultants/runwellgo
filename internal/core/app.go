@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/backup"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/ratelimit"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/update"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/backup"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/ratelimit"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/update"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // Config is what an install is started with; everything else lives in the
@@ -52,10 +52,11 @@ type Config struct {
 	Mailer Mailer
 	// UI serves the app (everything that isn't /api, /mcp or /up).
 	UI http.Handler
-	// NoDefaultPlugins leaves out the plugins the binary ships (tests).
+	// NoDefaultPlugins doesn't install the default plugins (Module.Default)
+	// at Start (tests).
 	NoDefaultPlugins bool
-	// Plugins are more plugins for the host to have, beside the built-in
-	// ones (tests).
+	// Plugins are the plugins the binary was built with (runwell.Main's):
+	// the host has these and no others.
 	Plugins []*plugin.Module
 }
 
@@ -127,7 +128,7 @@ func NewApp(cfg Config) (*App, error) {
 	a := &App{cfg: cfg, log: cfg.Logger, store: db, secrets: secrets, startedAt: time.Now(),
 		signIns: ratelimit.New(10), mailed: ratelimit.New(5), pluginCalls: ratelimit.New(30), agentCalls: ratelimit.New(agentRateLimit())}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
-	a.plugins = plugin.New(pluginEnv{a}, db, a.log, a.spawn, append(builtinPlugins(), a.cfg.Plugins...)...)
+	a.plugins = plugin.New(pluginEnv{a}, db, a.log, a.spawn, a.cfg.Plugins...)
 	a.listen()
 	if err := a.seed(context.Background()); err != nil {
 		a.cancel()

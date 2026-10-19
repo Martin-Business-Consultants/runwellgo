@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Two-factor sign-in: a code from an authenticator app (TOTP, 30 seconds)

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // The first-run checklist on home: the few things a new install needs

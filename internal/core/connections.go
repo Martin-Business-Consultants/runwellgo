@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
 )
 
 // Connections: everything one client's records tie together, for the

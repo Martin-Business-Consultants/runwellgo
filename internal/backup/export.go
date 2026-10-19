@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // A data export is the Rails core's other kind of export (Settings › Export

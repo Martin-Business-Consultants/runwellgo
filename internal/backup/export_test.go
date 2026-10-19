@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // A data export's plugin tables come in when the importer is told how to

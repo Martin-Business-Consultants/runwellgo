@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Search everything (SearchesController): the index's best 50 matches, each

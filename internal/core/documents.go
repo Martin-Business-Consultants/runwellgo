@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Documents: files kept on a client, an engagement, a scope item, a piece

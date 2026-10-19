@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/webhook"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/webhook"
 )
 
 // Settings › Webhooks: addresses that hear of every event (or the kinds

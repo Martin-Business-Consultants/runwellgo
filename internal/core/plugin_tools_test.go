@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // A plugin's tools are its caller's: a member is never offered, and can't

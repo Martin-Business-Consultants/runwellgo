@@ -16,7 +16,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/secret"
 )
 
 // Values the Rails core kept with Active Record encryption (a person's

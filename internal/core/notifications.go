@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/mail"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/mail"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Notifications (Fizzy's): what reaches a person. A mention makes one for

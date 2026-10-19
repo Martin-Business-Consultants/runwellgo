@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // danglingUserRefs counts rows whose user column names nobody: every

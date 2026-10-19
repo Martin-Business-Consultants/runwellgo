@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Settings is the install's one settings row: what it calls things, who its

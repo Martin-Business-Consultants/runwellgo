@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/update"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/update"
 )
 
 // Settings › Updates: the version this install runs, the newest release,

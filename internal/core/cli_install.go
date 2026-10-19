@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/update"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/update"
 )
 
 // The runwell CLI, served by the install so it matches it: /install/cli is

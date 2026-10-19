@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // A plugin's metrics (the metrics grant, plugin.API.Metrics): the numbers a

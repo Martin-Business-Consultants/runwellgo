@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
 )
 
 // Runwell over the Model Context Protocol (Streamable HTTP, stateless):
