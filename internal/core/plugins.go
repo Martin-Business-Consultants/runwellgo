@@ -17,10 +17,6 @@ import (
 	websitechecklist "github.com/Martin-Business-Consultants/runwellgo/plugins/website_checklist"
 )
 
-// builtinPlugins are the plugins this binary has. Adding one is adding its
-// package here; the default ones are installed and switched on at first
-// run (plugin.Host.EnsureDefaults), the rest wait for an owner to install
-// them from Settings › Plugins.
 // PluginTables makes every built-in plugin's own tables (its manifest's
 // Schema) in db: an imported data export's plugin rows then have somewhere
 // to go (backup.Options.PluginTables).
@@ -36,6 +32,10 @@ func PluginTables(ctx context.Context, db *store.DB) error {
 	return nil
 }
 
+// builtinPlugins are the plugins this binary has. Adding one is adding its
+// package here; the default ones are installed and switched on at first
+// run (plugin.Host.EnsureDefaults), the rest wait for an owner to install
+// them from Settings › Plugins.
 func builtinPlugins() []*plugin.Module {
 	return []*plugin.Module{hello.Module(), timetracking.Module(), myday.Module(), websitechecklist.Module(), ai.Module(), chat.Module(), reports.Module(), runners.Module()}
 }
