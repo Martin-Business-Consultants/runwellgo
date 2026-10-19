@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -104,9 +106,7 @@ func transcript(ctx context.Context, api *plugin.API, msgs []*storedMessage, too
 		byName[t.Name] = t
 	}
 	people := map[int64]string{}
-	for id, name := range peopleNames(ctx, api) {
-		people[id] = name
-	}
+	maps.Copy(people, peopleNames(ctx, api))
 	waiting := false
 	out := []map[string]any{}
 	for _, m := range msgs {
@@ -172,15 +172,15 @@ func addFeedback(ctx context.Context, api *plugin.API, out []map[string]any, use
 	if err != nil {
 		return
 	}
-	defer rows.Close()
 	rated := map[int64]string{}
-	for rows.Next() {
+	_ = eachRow(rows, func(rows *sql.Rows) error { // thumbs are a decoration: what was read is enough
 		var id int64
 		var r int
 		if rows.Scan(&id, &r) == nil {
 			rated[id] = map[int]string{1: "up", -1: "down"}[r]
 		}
-	}
+		return nil
+	})
 	for _, m := range out {
 		m["feedback"] = nullStr(rated[intOf(m["id"])])
 	}
@@ -241,13 +241,14 @@ func details(args map[string]any, people map[int64]string) [][2]string {
 				shown = strings.Join(parts, ", ")
 			default:
 				shown = str(x)
-				if dateOnly.MatchString(shown) {
+				switch {
+				case dateOnly.MatchString(shown):
 					if t, err := time.Parse(time.DateOnly, shown); err == nil {
 						shown = t.Format("January 2, 2006")
 					}
-				} else if (k == "owner_id" || k == "user_id") && people[intOf(x)] != "" {
+				case (k == "owner_id" || k == "user_id") && people[intOf(x)] != "":
 					shown = people[intOf(x)]
-				} else {
+				default:
 					shown = truncate(shown, 200)
 				}
 			}
@@ -314,5 +315,5 @@ func prompts(site plugin.Site, subjectType, name, page string) []string {
 	case strings.HasPrefix(page, "/work"):
 		return []string{"What’s blocked, and why?", "Who has too much on?", "What’s due this week?", "What finished this week?"}
 	}
-	return []string{"What needs me today?", "What changed since yesterday?", fmt.Sprintf("Find overdue %s", lower("commitment", true)), "Plan my week"}
+	return []string{"What needs me today?", "What changed since yesterday?", "Find overdue " + lower("commitment", true), "Plan my week"}
 }

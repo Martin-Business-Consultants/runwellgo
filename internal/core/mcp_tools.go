@@ -1,6 +1,8 @@
 package core
 
 import (
+	"maps"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,7 +14,7 @@ import (
 // Agent::Catalogue had them.
 
 // read is whether the tool only looks (a GET).
-func (t *toolSpec) read() bool { return t.Method == "GET" || t.Method == "HEAD" }
+func (t *toolSpec) read() bool { return t.Method == http.MethodGet || t.Method == http.MethodHead }
 
 // portalTool is whether the tool is a client's (the portal's), run as their
 // contact.
@@ -158,7 +160,7 @@ func snake(s string) string { return strings.TrimSuffix(searchTable(s), "s") }
 
 // annotations are MCP's hints about what a call does.
 func (t *toolSpec) annotations() map[string]any {
-	return map[string]any{"title": t.Summary, "readOnlyHint": t.read(), "destructiveHint": t.Method == "DELETE",
+	return map[string]any{"title": t.Summary, "readOnlyHint": t.read(), "destructiveHint": t.Method == http.MethodDelete,
 		"idempotentHint": t.read() || slices.Contains([]string{"PATCH", "PUT", "DELETE"}, t.Method), "openWorldHint": t.Confirm != ""}
 }
 
@@ -266,11 +268,11 @@ func shapeField(item string) (name, spec, note string, required bool) {
 		})
 	}
 	name = strings.TrimSpace(head)
-	if strings.HasSuffix(name, "!") {
-		name, required = strings.TrimSuffix(name, "!"), true
+	if before, ok := strings.CutSuffix(name, "!"); ok {
+		name, required = before, true
 	}
-	if strings.HasSuffix(spec, "!") {
-		spec, required = strings.TrimSuffix(spec, "!"), true
+	if before, ok := strings.CutSuffix(spec, "!"); ok {
+		spec, required = before, true
 	}
 	if strings.ContainsAny(name, " \"'") {
 		return "", "", "", false
@@ -329,9 +331,7 @@ func fieldSchema(name, spec string) map[string]any {
 
 func withDesc(s map[string]any, note string) map[string]any {
 	out := make(map[string]any, len(s)+1)
-	for k, v := range s {
-		out[k] = v
-	}
+	maps.Copy(out, s)
 	if d, ok := out["description"].(string); ok && d != "" {
 		out["description"] = d + " (" + note + ")"
 	} else {

@@ -62,20 +62,20 @@ type resolved struct {
 	ClientID int64
 }
 
-// errAmbiguous is several records matching a name.
-type errAmbiguous struct {
+// ambiguousError is several records matching a name.
+type ambiguousError struct {
 	typ, text  string
 	candidates []resolved
 }
 
-func (e *errAmbiguous) Error() string {
+func (e *ambiguousError) Error() string {
 	return "More than one " + strings.ToLower(humanize(snake(e.typ))) + " matches “" + e.text + "”."
 }
 
-// errMissing is no record matching a name.
-type errMissing struct{ typ, text string }
+// missingError is no record matching a name.
+type missingError struct{ typ, text string }
 
-func (e *errMissing) Error() string {
+func (e *missingError) Error() string {
 	return "No " + strings.ToLower(humanize(snake(e.typ))) + " matches “" + e.text + "”."
 }
 
@@ -161,7 +161,7 @@ func (a *App) candidates(ctx context.Context, typ, text string, limit int, clien
 	return a.describeAll(ctx, typ, ids)
 }
 
-// resolveName is the one record text names, or errMissing / errAmbiguous.
+// resolveName is the one record text names, or missingError / ambiguousError.
 func (a *App) resolveName(ctx context.Context, typ, text string, clientID int64) (resolved, error) {
 	found, err := a.candidates(ctx, typ, text, 8, clientID)
 	if err != nil {
@@ -169,11 +169,11 @@ func (a *App) resolveName(ctx context.Context, typ, text string, clientID int64)
 	}
 	switch len(found) {
 	case 0:
-		return resolved{}, &errMissing{typ, text}
+		return resolved{}, &missingError{typ, text}
 	case 1:
 		return found[0], nil
 	}
-	return resolved{}, &errAmbiguous{typ, text, found}
+	return resolved{}, &ambiguousError{typ, text, found}
 }
 
 // idFor is an id as given, or the id of the record a name stands for.

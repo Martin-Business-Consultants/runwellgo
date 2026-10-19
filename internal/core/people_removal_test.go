@@ -99,7 +99,7 @@ func TestRemovePersonHandsTheirWorkOver(t *testing.T) {
 	tedToken, sarahToken := token(ted), token(sarah)
 	call := func(tok, method, path, body string) (int, map[string]any) {
 		t.Helper()
-		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+		req, _ := http.NewRequestWithContext(t.Context(), method, srv.URL+path, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("Content-Type", "application/json")
 		res, err := http.DefaultClient.Do(req)

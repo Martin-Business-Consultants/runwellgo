@@ -61,11 +61,11 @@ func addItem(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin
 	_, _ = rand.Read(hexKey)
 	i.Key = "custom:" + hex.EncodeToString(hexKey)
 	err = api.Tx(ctx, func(tx plugin.Querier) error {
-		var max int
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(max(position), 0) FROM website_checklist_items WHERE site_id = ?`, s.ID).Scan(&max); err != nil {
+		var last int
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(max(position), 0) FROM website_checklist_items WHERE site_id = ?`, s.ID).Scan(&last); err != nil {
 			return err
 		}
-		i.Position = max + 1
+		i.Position = last + 1
 		now := store.Now().DB()
 		res, err := tx.Exec(ctx, `INSERT INTO website_checklist_items (site_id, "key", "group", title, detail, value, note, custom, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
 			s.ID, i.Key, i.Group, i.Title, nullable(i.Detail), nullable(i.Value), nullable(i.Note), i.Position, now, now)
@@ -268,7 +268,7 @@ func uploads(req *plugin.Request) ([]upload, error) {
 		mr := multipart.NewReader(bytes.NewReader(req.Body), ps["boundary"])
 		for {
 			part, err := mr.NextPart()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {

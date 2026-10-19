@@ -219,9 +219,9 @@ func (e *Engagement) Recurring() bool { return e.Shape == "recurring" }
 
 // CurrentVersion is the latest version the client approved: the terms in force.
 func (e *Engagement) CurrentVersion() *AgreementVersion {
-	for i := len(e.Versions) - 1; i >= 0; i-- {
-		if e.Versions[i].Approved() {
-			return e.Versions[i]
+	for _, v := range slices.Backward(e.Versions) {
+		if v.Approved() {
+			return v
 		}
 	}
 	return nil
@@ -229,9 +229,9 @@ func (e *Engagement) CurrentVersion() *AgreementVersion {
 
 // DraftVersion is the open draft, if there is one.
 func (e *Engagement) DraftVersion() *AgreementVersion {
-	for i := len(e.Versions) - 1; i >= 0; i-- {
-		if e.Versions[i].Draft() {
-			return e.Versions[i]
+	for _, v := range slices.Backward(e.Versions) {
+		if v.Draft() {
+			return v
 		}
 	}
 	return nil
@@ -239,9 +239,9 @@ func (e *Engagement) DraftVersion() *AgreementVersion {
 
 // PendingVersion is the version waiting on the client's decision.
 func (e *Engagement) PendingVersion() *AgreementVersion {
-	for i := len(e.Versions) - 1; i >= 0; i-- {
-		if e.Versions[i].AwaitingDecision() {
-			return e.Versions[i]
+	for _, v := range slices.Backward(e.Versions) {
+		if v.AwaitingDecision() {
+			return v
 		}
 	}
 	return nil

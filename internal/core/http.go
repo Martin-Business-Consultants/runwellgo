@@ -539,15 +539,6 @@ func has(m map[string]any, key string) bool {
 	return ok
 }
 
-func firstOf(m map[string]any, keys ...string) any {
-	for _, k := range keys {
-		if v, ok := m[k]; ok && v != nil && v != "" {
-			return v
-		}
-	}
-	return nil
-}
-
 func asList(v any) []any {
 	l, _ := v.([]any)
 	return l

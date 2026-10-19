@@ -125,105 +125,17 @@ func (a *App) recordInfos(ctx context.Context, refs []searchRef) (map[searchRef]
 	if err != nil {
 		return nil, err
 	}
-	// Notes and documents show as what they're kept on.
-	type held struct {
-		ref, subject searchRef
-		display      string
-	}
-	var heldOn []held
+	var heldOn []heldRecord
 	for typ, ids := range byType {
-		in := `(` + store.Placeholders(len(ids)) + `)`
-		args := idArgs(ids)
-		var q string
-		switch typ {
-		case "Client":
-			q = `SELECT id, name, '', '', id, '' FROM clients WHERE id IN ` + in
-		case "Contact":
-			q = `SELECT id, name, '', '', client_id, '' FROM contacts WHERE id IN ` + in
-		case "Engagement":
-			q = `SELECT e.id, e.ref || ' ' || e.title, e.ref, e.label, e.client_id, c.name FROM engagements e JOIN clients c ON c.id = e.client_id WHERE e.id IN ` + in
-		case "Todo":
-			q = `SELECT t.id, t.title, e.ref, e.title, e.client_id, '' FROM todos t JOIN engagements e ON e.id = t.engagement_id WHERE t.id IN ` + in
-		case "Request":
-			q = `SELECT id, subject, '', '', COALESCE(client_id, 0), '' FROM requests WHERE id IN ` + in
-		case "Commitment":
-			q = `SELECT m.id, m.description, COALESCE(e.ref, ''), '', m.client_id, '' FROM commitments m LEFT JOIN engagements e ON e.id = m.engagement_id WHERE m.id IN ` + in
-		case "ScopeItem":
-			q = `SELECT s.id, s.description, e.ref, e.title, e.client_id, '' FROM scope_items s JOIN agreement_versions v ON v.id = s.agreement_version_id JOIN engagements e ON e.id = v.engagement_id WHERE s.id IN ` + in
-		case "AgreementVersion":
-			q = `SELECT v.id, CASE v.kind WHEN 'initial' THEN 'Agreement' ELSE upper(substr(replace(v.kind, '_', ' '), 1, 1)) || substr(replace(v.kind, '_', ' '), 2) || ' #' || v.number END,
-				e.ref, e.title, e.client_id, '' FROM agreement_versions v JOIN engagements e ON e.id = v.engagement_id WHERE v.id IN ` + in
-		case "Note":
-			q = `SELECT id, kind, subject_type, '', subject_id, '' FROM notes WHERE id IN ` + in
-		case "Document":
-			q = `SELECT d.id, COALESCE((SELECT b.filename FROM active_storage_attachments x JOIN active_storage_blobs b ON b.id = x.blob_id
-					WHERE x.record_type = 'Document' AND x.record_id = d.id AND x.name = 'file' ORDER BY x.id DESC LIMIT 1), ''),
-				d.documentable_type, '', d.documentable_id, '' FROM documents d WHERE d.id IN ` + in
-		default:
+		q := recordInfoQuery(typ, `(`+store.Placeholders(len(ids))+`)`)
+		if q == "" {
 			continue
 		}
-		rows, err := a.store.QueryContext(ctx, q, args...)
+		held, err := a.scanRecordInfos(ctx, s, typ, q, idArgs(ids), out)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var id, num int64
-			var display, x, y, z string
-			if err := rows.Scan(&id, &display, &x, &y, &num, &z); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			ref := searchRef{typ, id}
-			info := &recordInfo{Display: display, ClientID: num}
-			switch typ {
-			case "Client":
-				info.Path, info.Label = fmt.Sprintf("/clients/%d", id), s.Term("client", 1)
-				info.HeadRef, info.HeadName = s.Term("client", 1), display
-			case "Contact":
-				info.Path, info.Label = fmt.Sprintf("/clients/%d", num), "Contact"
-				info.HeadRef, info.HeadName = "Contact", display
-			case "Engagement":
-				info.Ref, info.Path, info.Label = x, "/engagements/"+url.PathEscape(x), s.LabelName(y, 1)
-				if info.Label == "" {
-					info.Label = s.Term("engagement", 1)
-				}
-				info.HeadRef, info.HeadName = x, z
-			case "Todo":
-				info.Path, info.Label = fmt.Sprintf("/work/%d", id), s.Term("work", 1)
-				info.HeadRef, info.HeadName = x, y
-			case "Request":
-				info.Path, info.Label = fmt.Sprintf("/requests/%d", id), "Request"
-				info.HeadRef, info.HeadName = "Request", display
-			case "Commitment":
-				// On its engagement's page, else its client's.
-				if x != "" {
-					info.Path = "/engagements/" + url.PathEscape(x) + "?tab=commitments"
-				} else {
-					info.Path = fmt.Sprintf("/clients/%d?tab=commitments", num)
-				}
-				info.Label = s.Term("commitment", 1)
-				info.HeadRef, info.HeadName = s.Term("commitment", 1), display
-			case "ScopeItem":
-				info.Path, info.Label = fmt.Sprintf("/scope_items/%d", id), s.Term("scope_item", 1)
-				info.HeadRef, info.HeadName = x, y
-			case "AgreementVersion":
-				info.Display = x + " " + display
-				info.Path, info.Label = "/engagements/"+url.PathEscape(x), "Agreement version"
-				info.HeadRef, info.HeadName = x, y
-			case "Note":
-				info.Display, info.Label, info.ClientID = humanize(display)+" note", "Note", 0
-				heldOn = append(heldOn, held{ref, searchRef{x, num}, info.Display})
-			case "Document":
-				info.Label, info.ClientID = "Document", 0
-				info.HeadRef, info.HeadName = "Document", display
-				heldOn = append(heldOn, held{ref, searchRef{x, num}, display})
-			}
-			out[ref] = info
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
+		heldOn = append(heldOn, held...)
 	}
 	if len(heldOn) > 0 {
 		subjects := make([]searchRef, len(heldOn))
@@ -251,4 +163,108 @@ func (a *App) recordInfos(ctx context.Context, refs []searchRef) (map[searchRef]
 		}
 	}
 	return out, nil
+}
+
+// heldRecord is a note or document, which shows as what it's kept on.
+type heldRecord struct {
+	ref, subject searchRef
+	display      string
+}
+
+// recordInfoQuery is the query for how records of typ show (id, display,
+// and three columns by type), for the ids in in; "" for a type that has
+// none.
+func recordInfoQuery(typ, in string) string {
+	switch typ {
+	case "Client":
+		return `SELECT id, name, '', '', id, '' FROM clients WHERE id IN ` + in
+	case "Contact":
+		return `SELECT id, name, '', '', client_id, '' FROM contacts WHERE id IN ` + in
+	case "Engagement":
+		return `SELECT e.id, e.ref || ' ' || e.title, e.ref, e.label, e.client_id, c.name FROM engagements e JOIN clients c ON c.id = e.client_id WHERE e.id IN ` + in
+	case "Todo":
+		return `SELECT t.id, t.title, e.ref, e.title, e.client_id, '' FROM todos t JOIN engagements e ON e.id = t.engagement_id WHERE t.id IN ` + in
+	case "Request":
+		return `SELECT id, subject, '', '', COALESCE(client_id, 0), '' FROM requests WHERE id IN ` + in
+	case "Commitment":
+		return `SELECT m.id, m.description, COALESCE(e.ref, ''), '', m.client_id, '' FROM commitments m LEFT JOIN engagements e ON e.id = m.engagement_id WHERE m.id IN ` + in
+	case "ScopeItem":
+		return `SELECT s.id, s.description, e.ref, e.title, e.client_id, '' FROM scope_items s JOIN agreement_versions v ON v.id = s.agreement_version_id JOIN engagements e ON e.id = v.engagement_id WHERE s.id IN ` + in
+	case "AgreementVersion":
+		return `SELECT v.id, CASE v.kind WHEN 'initial' THEN 'Agreement' ELSE upper(substr(replace(v.kind, '_', ' '), 1, 1)) || substr(replace(v.kind, '_', ' '), 2) || ' #' || v.number END,
+			e.ref, e.title, e.client_id, '' FROM agreement_versions v JOIN engagements e ON e.id = v.engagement_id WHERE v.id IN ` + in
+	case "Note":
+		return `SELECT id, kind, subject_type, '', subject_id, '' FROM notes WHERE id IN ` + in
+	case "Document":
+		return `SELECT d.id, COALESCE((SELECT b.filename FROM active_storage_attachments x JOIN active_storage_blobs b ON b.id = x.blob_id
+				WHERE x.record_type = 'Document' AND x.record_id = d.id AND x.name = 'file' ORDER BY x.id DESC LIMIT 1), ''),
+			d.documentable_type, '', d.documentable_id, '' FROM documents d WHERE d.id IN ` + in
+	default:
+		return ""
+	}
+}
+
+// scanRecordInfos adds what q finds for records of typ to out: the notes
+// and documents among them still to be named after what they're on.
+func (a *App) scanRecordInfos(ctx context.Context, s *Settings, typ, q string, args []any, out map[searchRef]*recordInfo) ([]heldRecord, error) {
+	rows, err := a.store.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var heldOn []heldRecord
+	for rows.Next() {
+		var id, num int64
+		var display, x, y, z string
+		if err := rows.Scan(&id, &display, &x, &y, &num, &z); err != nil {
+			return nil, err
+		}
+		ref := searchRef{typ, id}
+		info := &recordInfo{Display: display, ClientID: num}
+		switch typ {
+		case "Client":
+			info.Path, info.Label = fmt.Sprintf("/clients/%d", id), s.Term("client", 1)
+			info.HeadRef, info.HeadName = s.Term("client", 1), display
+		case "Contact":
+			info.Path, info.Label = fmt.Sprintf("/clients/%d", num), "Contact"
+			info.HeadRef, info.HeadName = "Contact", display
+		case "Engagement":
+			info.Ref, info.Path, info.Label = x, "/engagements/"+url.PathEscape(x), s.LabelName(y, 1)
+			if info.Label == "" {
+				info.Label = s.Term("engagement", 1)
+			}
+			info.HeadRef, info.HeadName = x, z
+		case "Todo":
+			info.Path, info.Label = fmt.Sprintf("/work/%d", id), s.Term("work", 1)
+			info.HeadRef, info.HeadName = x, y
+		case "Request":
+			info.Path, info.Label = fmt.Sprintf("/requests/%d", id), "Request"
+			info.HeadRef, info.HeadName = "Request", display
+		case "Commitment":
+			// On its engagement's page, else its client's.
+			if x != "" {
+				info.Path = "/engagements/" + url.PathEscape(x) + "?tab=commitments"
+			} else {
+				info.Path = fmt.Sprintf("/clients/%d?tab=commitments", num)
+			}
+			info.Label = s.Term("commitment", 1)
+			info.HeadRef, info.HeadName = s.Term("commitment", 1), display
+		case "ScopeItem":
+			info.Path, info.Label = fmt.Sprintf("/scope_items/%d", id), s.Term("scope_item", 1)
+			info.HeadRef, info.HeadName = x, y
+		case "AgreementVersion":
+			info.Display = x + " " + display
+			info.Path, info.Label = "/engagements/"+url.PathEscape(x), "Agreement version"
+			info.HeadRef, info.HeadName = x, y
+		case "Note":
+			info.Display, info.Label, info.ClientID = humanize(display)+" note", "Note", 0
+			heldOn = append(heldOn, heldRecord{ref, searchRef{x, num}, info.Display})
+		case "Document":
+			info.Label, info.ClientID = "Document", 0
+			info.HeadRef, info.HeadName = "Document", display
+			heldOn = append(heldOn, heldRecord{ref, searchRef{x, num}, display})
+		}
+		out[ref] = info
+	}
+	return heldOn, rows.Err()
 }

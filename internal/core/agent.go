@@ -89,14 +89,6 @@ func body(wrap, desc string, required bool) toolOpt {
 	}
 }
 
-// bodyList is a JSON list the route takes, sent as {wrap: [...]}.
-func bodyList(wrap, desc string) toolOpt {
-	return func(t *toolSpec) {
-		t.Wrap = wrap
-		t.Params = append(t.Params, toolParam{Name: wrap, In: "body", Type: "array", Desc: desc, Required: true})
-	}
-}
-
 func note(s string) toolOpt { return func(t *toolSpec) { t.Notes = s } }
 
 // confirm marks a tool that reaches a client: it previews first.

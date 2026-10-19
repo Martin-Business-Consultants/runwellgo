@@ -38,7 +38,7 @@ type ApprovalLink struct {
 
 // Expired is whether the link is past its date.
 func (l *ApprovalLink) Expired() bool {
-	return !l.ExpiresAt.Valid || !l.ExpiresAt.Time.After(time.Now())
+	return !l.ExpiresAt.Valid || !l.ExpiresAt.After(time.Now())
 }
 
 // approvalLink is the link with token; notFound when there's none.

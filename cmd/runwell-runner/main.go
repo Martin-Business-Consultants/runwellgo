@@ -30,16 +30,22 @@ import (
 var version = "dev"
 
 func main() {
+	os.Exit(exitCode())
+}
+
+// exitCode runs the command, answering 2 for a usage mistake, 1 for any
+// other error.
+func exitCode() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, stop, os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "runwell-runner:", err)
-		var u usageError
-		if errors.As(err, &u) {
-			os.Exit(2)
+		if _, ok := errors.AsType[usageError](err); ok {
+			return 2
 		}
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 type usageError struct{ error }

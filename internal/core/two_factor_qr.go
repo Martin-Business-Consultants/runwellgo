@@ -96,14 +96,14 @@ func qrEncode(text string) (*qrCode, error) {
 		}
 	}
 	var final []byte
-	for i := 0; i < max(b[2], b[4]); i++ {
+	for i := range max(b[2], b[4]) {
 		for _, block := range blocks {
 			if i < len(block) {
 				final = append(final, block[i])
 			}
 		}
 	}
-	for i := 0; i < b[0]; i++ {
+	for i := range b[0] {
 		for _, ec := range ecs {
 			final = append(final, ec[i])
 		}
@@ -195,7 +195,7 @@ func (q *qrCode) drawFormat(mask int) {
 	}
 	bits := (data<<10 | rem) ^ 0x5412
 	bit := func(i int) bool { return (bits>>i)&1 == 1 }
-	for i := 0; i <= 5; i++ {
+	for i := range 6 {
 		q.set(8, i, bit(i))
 	}
 	q.set(8, 7, bit(6))
@@ -297,7 +297,7 @@ func (q *qrCode) penalty() int {
 			}
 			if x < q.size-1 && y < q.size-1 {
 				c := q.modules[y][x]
-				if c == q.modules[y][x+1] && c == q.modules[y+1][x] && c == q.modules[y+1][x+1] {
+				if c == q.modules[y][x+1] && c == q.modules[y+1][x] && c == q.modules[y+1][x+1] { //nolint:gocritic // a 2×2 block all one color
 					score += 3
 				}
 			}

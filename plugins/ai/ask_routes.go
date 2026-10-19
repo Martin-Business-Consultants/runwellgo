@@ -41,7 +41,6 @@ type streamer struct {
 	text     strings.Builder
 	thinking strings.Builder
 	last     time.Time
-	pending  bool
 	timer    *time.Timer
 }
 
@@ -323,7 +322,7 @@ func sendChat(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugi
 			case !imageTypes[typ]:
 				return refuse(http.StatusUnprocessableEntity, "Pictures are PNG, JPEG, GIF or WebP."), nil
 			case err != nil || len(raw) == 0:
-				return refuse(http.StatusUnprocessableEntity, "A picture couldn’t be read: attach it again."), nil
+				return refuse(http.StatusUnprocessableEntity, "A picture couldn’t be read: attach it again."), nil //nolint:nilerr // the caller's mistake, answered
 			case len(raw) > maxImageBytes:
 				return refuse(http.StatusUnprocessableEntity, "A picture is larger than 3 MB: send a smaller one."), nil
 			}
@@ -348,15 +347,16 @@ func stopChat(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugi
 		return res, err
 	}
 	if v, ok := askReplies.Load(c.ID); ok {
-		st := v.(*stopper)
-		st.stopped.Store(true)
-		st.cancel()
+		if st, ok := v.(*stopper); ok { // all askReplies holds
+			st.stopped.Store(true)
+			st.cancel()
+		}
 	} else if c.replying() {
 		// Not in this process (a restart): it isn't coming.
 		_, _ = api.Exec(ctx, `UPDATE ai_chats SET replying_since = NULL WHERE id = ?`, c.ID)
 	}
 	// The reply notices and saves what it had; give it a moment.
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if c, err = loadChat(ctx, api, c.ID); err != nil || !c.replying() {
 			break
 		}
@@ -521,7 +521,7 @@ func messageImage(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 	}
 	data, err := base64.StdEncoding.DecodeString(kept.Images[n].Data)
 	if err != nil {
-		return missing("picture"), nil
+		return missing("picture"), nil //nolint:nilerr // a picture that can't be read is one that isn't there
 	}
 	return &plugin.Response{Status: 200, Body: data, Headers: map[string]string{"Content-Type": kept.Images[n].MediaType, "Cache-Control": "private, max-age=86400"}}, nil
 }

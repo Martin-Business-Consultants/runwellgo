@@ -590,6 +590,35 @@ func (m *Manifest) validate() error {
 			add("hooks name events like client.created (or *.approval.requested, any plugin's), not %q", h)
 		}
 	}
+	errs = append(errs, m.validateRoutes()...)
+	for i, t := range m.Tasks {
+		if t.Name == "" || (t.Every != "nightly" && t.Interval() < time.Minute) {
+			add("tasks[%d] needs a name and every: a duration of a minute or more, or \"nightly\"", i)
+		}
+	}
+	for _, host := range m.Permissions.HTTP {
+		if host == "*" || strings.Contains(host, "/") {
+			add("permissions.http names hosts, not \"*\" or URLs: %s", host)
+		}
+	}
+	if m.Nav != nil && m.Nav.Badge != "" {
+		if r := m.Route("GET", m.Nav.Badge); r == nil || r.Public || r.Portal {
+			add("nav.badge must be a GET route of its own, for people on staff")
+		}
+	}
+	errs = append(errs, m.validateContent()...)
+	errs = append(errs, m.validateScreens()...)
+	if len(errs) > 0 {
+		return fmt.Errorf("plugin %s: %s", m.Key, strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// validateRoutes checks the routes: their paths, methods and limits, and
+// what each needs to be a portal route, a machine route or an agent tool.
+func (m *Manifest) validateRoutes() []string {
+	var errs []string
+	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 	tools := map[string]bool{}
 	for i, r := range m.Routes {
 		if r.Export == "" || !strings.HasPrefix(r.Path, "/") {
@@ -634,27 +663,7 @@ func (m *Manifest) validate() error {
 			tools[r.Tool.Name] = true
 		}
 	}
-	for i, t := range m.Tasks {
-		if t.Name == "" || (t.Every != "nightly" && t.Interval() < time.Minute) {
-			add("tasks[%d] needs a name and every: a duration of a minute or more, or \"nightly\"", i)
-		}
-	}
-	for _, host := range m.Permissions.HTTP {
-		if host == "*" || strings.Contains(host, "/") {
-			add("permissions.http names hosts, not \"*\" or URLs: %s", host)
-		}
-	}
-	if m.Nav != nil && m.Nav.Badge != "" {
-		if r := m.Route("GET", m.Nav.Badge); r == nil || r.Public || r.Portal {
-			add("nav.badge must be a GET route of its own, for people on staff")
-		}
-	}
-	errs = append(errs, m.validateContent()...)
-	errs = append(errs, m.validateScreens()...)
-	if len(errs) > 0 {
-		return fmt.Errorf("plugin %s: %s", m.Key, strings.Join(errs, "; "))
-	}
-	return nil
+	return errs
 }
 
 // Route is the route serving method and path, nil when there's none.

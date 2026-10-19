@@ -39,7 +39,7 @@ func (a *App) oauthRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /oauth/revocation", a.oauthRevocation)
 	// Rails' address for the consent page: the app's screen is /oauth/authorize.
 	mux.HandleFunc("GET /oauth/authorization", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/oauth/authorize?"+r.URL.RawQuery, http.StatusFound)
+		http.Redirect(w, r, "/oauth/authorize?"+r.URL.RawQuery, http.StatusFound) //nolint:gosec // our own path; only the query is the caller's
 	})
 
 	a.handle(mux, "GET /api/oauth/authorization", a.showOauthAuthorization, open)
@@ -174,13 +174,11 @@ func oauthParams(r *http.Request) (map[string]any, error) {
 	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if ct == "application/json" {
 		raw, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, 1<<20))
+		if err == nil && len(strings.TrimSpace(string(raw))) > 0 {
+			err = json.Unmarshal(raw, &out)
+		}
 		if err != nil {
 			return nil, err
-		}
-		if len(strings.TrimSpace(string(raw))) > 0 {
-			if err := json.Unmarshal(raw, &out); err != nil {
-				return nil, err
-			}
 		}
 	} else {
 		r.Body = http.MaxBytesReader(nil, r.Body, 1<<20)

@@ -88,9 +88,9 @@ func tokenize(q string) []token {
 			}
 			out = append(out, token{text: strings.ToLower(q[i+1 : i+1+j]), name: true})
 			i += j + 2
-		case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9':
+		case c != '$' && isWordByte(c):
 			j := i
-			for j < len(q) && (q[j] == '_' || q[j] == '$' || q[j] >= 'a' && q[j] <= 'z' || q[j] >= 'A' && q[j] <= 'Z' || q[j] >= '0' && q[j] <= '9') {
+			for j < len(q) && isWordByte(q[j]) {
 				j++
 			}
 			out = append(out, token{text: strings.ToLower(q[i:j]), name: true})
@@ -101,6 +101,12 @@ func tokenize(q string) []token {
 		}
 	}
 	return out
+}
+
+// isWordByte is whether c may be in a bare name or keyword: a letter, a
+// digit, _ or $ (which can't start one).
+func isWordByte(c byte) bool {
+	return c == '_' || c == '$' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
 // checkStatement refuses a query that isn't one statement on the plugin's
@@ -114,7 +120,7 @@ func checkStatement(key, q string) error {
 		}
 		return nil
 	}
-	for i := 0; i < len(toks); i++ {
+	for i := range toks {
 		t := toks[i]
 		if t.text == ";" {
 			if i != len(toks)-1 {
@@ -131,10 +137,7 @@ func checkStatement(key, q string) error {
 		switch t.text {
 		case "from", "join", "into", "update", "table":
 			j := i + 1
-			for {
-				if j >= len(toks) {
-					break
-				}
+			for j < len(toks) {
 				n := toks[j]
 				if n.text == "(" { // a subquery: its own FROM is checked as it's read
 					break
@@ -185,11 +188,7 @@ func checkSchema(key, schema string) error {
 			}
 			continue
 		}
-		ok := len(words) >= 6 && words[0] == "create" &&
-			((words[1] == "table" && words[2] == "if" && words[3] == "not" && words[4] == "exists") ||
-				(words[1] == "index" && words[2] == "if" && words[3] == "not" && words[4] == "exists") ||
-				(words[1] == "unique" && words[2] == "index" && words[3] == "if" && words[4] == "not" && words[5] == "exists"))
-		if !ok {
+		if !createIfNotExists(words) {
 			return fmt.Errorf("only CREATE TABLE IF NOT EXISTS, CREATE [UNIQUE] INDEX IF NOT EXISTS and ALTER TABLE … ADD COLUMN: %.60s", stmt)
 		}
 		name := words[5]
@@ -199,7 +198,7 @@ func checkSchema(key, schema string) error {
 		// A table is <key>_…; an index may also be named the Rails way,
 		// index_<key>_…, so a ported plugin's indexes keep their names.
 		isIndex := words[1] == "index" || words[1] == "unique"
-		if !strings.HasPrefix(name, key+"_") && !(isIndex && strings.HasPrefix(name, "index_"+key+"_")) {
+		if !strings.HasPrefix(name, key+"_") && (!isIndex || !strings.HasPrefix(name, "index_"+key+"_")) {
 			return fmt.Errorf("%q isn't named %s_…", name, key)
 		}
 		if words[1] == "index" || words[1] == "unique" {
@@ -213,12 +212,21 @@ func checkSchema(key, schema string) error {
 	return nil
 }
 
+// createIfNotExists is whether a statement's words are CREATE TABLE IF
+// NOT EXISTS or CREATE [UNIQUE] INDEX IF NOT EXISTS, with a name after.
+func createIfNotExists(words []string) bool {
+	return len(words) >= 6 && words[0] == "create" &&
+		((words[1] == "table" && words[2] == "if" && words[3] == "not" && words[4] == "exists") ||
+			(words[1] == "index" && words[2] == "if" && words[3] == "not" && words[4] == "exists") ||
+			(words[1] == "unique" && words[2] == "index" && words[3] == "if" && words[4] == "not" && words[5] == "exists"))
+}
+
 // splitStatements splits a schema on its semicolons (outside quotes).
 func splitStatements(schema string) []string {
 	var out []string
 	var cur strings.Builder
 	quote := byte(0)
-	for i := 0; i < len(schema); i++ {
+	for i := range len(schema) {
 		c := schema[i]
 		switch {
 		case quote != 0:

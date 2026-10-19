@@ -177,7 +177,7 @@ type kv struct {
 func o(pairs ...any) obj {
 	out := make(obj, 0, len(pairs)/2)
 	for i := 0; i+1 < len(pairs); i += 2 {
-		out = append(out, kv{pairs[i].(string), pairs[i+1]})
+		out = append(out, kv{pairs[i].(string), pairs[i+1]}) //nolint:forcetypeassert,errcheck // keys are the callers' string literals
 	}
 	return out
 }

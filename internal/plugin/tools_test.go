@@ -66,7 +66,7 @@ func toolsHost(t *testing.T, grants Grants) (*Host, *fakeEnv) {
 	t.Cleanup(func() { db.Close() })
 	run := func(ctx context.Context, api *API, req *Request) (*Response, error) {
 		if _, err := api.RunTool(ctx, req.Actor, req.Query.Get("tool"), nil); err != nil {
-			return JSON(422, map[string]any{"message": err.Error()}), nil
+			return JSON(422, map[string]any{"message": err.Error()}), nil //nolint:nilerr // answered as a 422
 		}
 		return JSON(200, map[string]any{}), nil
 	}
@@ -82,7 +82,7 @@ func toolsHost(t *testing.T, grants Grants) (*Host, *fakeEnv) {
 				return nil, err
 			}
 			if later != nil {
-				return JSON(422, map[string]any{"message": later.Error()}), nil
+				return JSON(422, map[string]any{"message": later.Error()}), nil //nolint:nilerr // answered as a 422
 			}
 			return JSON(200, map[string]any{}), nil
 		}},

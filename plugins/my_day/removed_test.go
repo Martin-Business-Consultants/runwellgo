@@ -32,13 +32,16 @@ func TestUserRemovedHandsPrioritiesOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
 	var got []int
 	for rows.Next() {
 		var id int
 		_ = rows.Scan(&id)
 		got = append(got, id)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	want := []int{11, 20, 10, 12, 13}
 	if len(got) != len(want) {
 		t.Fatalf("Marcus's priorities: %v, want %v", got, want)

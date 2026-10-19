@@ -145,50 +145,7 @@ func build(ctx context.Context, api *plugin.API, f filter, clientID int64) (*rep
 	for _, e := range m.Engagements {
 		engs[e.ClientID] = append(engs[e.ClientID], e)
 	}
-	// Facts by client: work done in the last 4 weeks and the 4 before,
-	// activity by the week, this year's approvals, the last three days.
-	year := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
-	monday := startOfWeek(now)
-	first := monday.AddDate(0, 0, -7*(activityWeeks-1))
-	recent, before := now.AddDate(0, 0, -28), now.AddDate(0, 0, -56)
-	live := now.Add(-72 * time.Hour)
-	mo := map[int64]*momentum{}
-	activity := map[int64][]int{}
-	thisYear := map[int64]int64{}
-	lively := map[int64]bool{}
-	for _, fc := range m.Facts {
-		if fc.ClientID == 0 {
-			continue
-		}
-		at := fc.At.In(loc)
-		switch fc.Kind {
-		case "todo.done":
-			if mo[fc.ClientID] == nil {
-				mo[fc.ClientID] = &momentum{}
-			}
-			if at.After(recent) {
-				mo[fc.ClientID].recent++
-			} else if at.After(before) {
-				mo[fc.ClientID].before++
-			}
-		case "agreement.approved":
-			if !at.Before(year) {
-				thisYear[fc.ClientID] += fc.Cents
-			}
-		}
-		switch fc.Kind {
-		case "todo.done", "note.added", "agreement.approved", "agreement.changes_requested", "request.received", "commitment.done":
-			if i := int(at.Sub(first).Hours() / (24 * 7)); i >= 0 && i < activityWeeks && !at.Before(first) {
-				if activity[fc.ClientID] == nil {
-					activity[fc.ClientID] = make([]int, activityWeeks)
-				}
-				activity[fc.ClientID][i]++
-			}
-			if at.After(live) {
-				lively[fc.ClientID] = true
-			}
-		}
-	}
+	mo, activity, thisYear, lively := clientFacts(m.Facts, now, loc)
 
 	// Where each is: set by hand, else its address, else its zone's city
 	// (ours when it has none).
@@ -257,6 +214,52 @@ func build(ctx context.Context, api *plugin.API, f filter, clientID int64) (*rep
 		r.rows = []*clientRow{}
 	}
 	return r, nil
+}
+
+// clientFacts is the facts by client: work done in the last 4 weeks and
+// the 4 before, activity by the week, this year's approvals, and whether
+// there's been any in the last three days.
+func clientFacts(facts []plugin.Fact, now time.Time, loc *time.Location) (mo map[int64]*momentum, activity map[int64][]int, thisYear map[int64]int64, lively map[int64]bool) {
+	year := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, loc)
+	monday := startOfWeek(now)
+	first := monday.AddDate(0, 0, -7*(activityWeeks-1))
+	recent, before := now.AddDate(0, 0, -28), now.AddDate(0, 0, -56)
+	live := now.Add(-72 * time.Hour)
+	mo, activity, thisYear, lively = map[int64]*momentum{}, map[int64][]int{}, map[int64]int64{}, map[int64]bool{}
+	for _, fc := range facts {
+		if fc.ClientID == 0 {
+			continue
+		}
+		at := fc.At.In(loc)
+		switch fc.Kind {
+		case "todo.done":
+			if mo[fc.ClientID] == nil {
+				mo[fc.ClientID] = &momentum{}
+			}
+			if at.After(recent) {
+				mo[fc.ClientID].recent++
+			} else if at.After(before) {
+				mo[fc.ClientID].before++
+			}
+		case "agreement.approved":
+			if !at.Before(year) {
+				thisYear[fc.ClientID] += fc.Cents
+			}
+		}
+		switch fc.Kind {
+		case "todo.done", "note.added", "agreement.approved", "agreement.changes_requested", "request.received", "commitment.done":
+			if i := int(at.Sub(first).Hours() / (24 * 7)); i >= 0 && i < activityWeeks && !at.Before(first) {
+				if activity[fc.ClientID] == nil {
+					activity[fc.ClientID] = make([]int, activityWeeks)
+				}
+				activity[fc.ClientID][i]++
+			}
+			if at.After(live) {
+				lively[fc.ClientID] = true
+			}
+		}
+	}
+	return mo, activity, thisYear, lively
 }
 
 func zoneOr(zone, fallback string) string {
@@ -351,15 +354,15 @@ func perMonth(cents int64, cadence string) int64 {
 // headline is the report in a sentence: "You serve 12 clients in 5
 // countries across 4 time zones."
 func (r *report) headline(t map[string]any) string {
-	n := t["clients"].(int)
+	n := t["clients"].(int) //nolint:forcetypeassert,errcheck // the report's own map, its types known
 	if n == 0 {
 		return "No " + r.words.clientN + " match these filters."
 	}
 	s := "You serve " + plural(n, r.words.client1, r.words.clientN)
-	if c := t["countries"].(int); c > 0 {
+	if c := t["countries"].(int); c > 0 { //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		s += " in " + plural(c, "country", "countries")
 	}
-	if z := t["time_zones"].(int); z > 1 {
+	if z := t["time_zones"].(int); z > 1 { //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		s += fmt.Sprintf(" across %d time zones", z)
 	}
 	return s
@@ -423,10 +426,10 @@ func (r *report) money() map[string]any {
 		}
 		switch f.Kind {
 		case "agreement.approved":
-			byMonth[i]["approved_cents"] = byMonth[i]["approved_cents"].(int64) + f.Cents
-			byMonth[i]["approvals"] = byMonth[i]["approvals"].(int) + 1
+			byMonth[i]["approved_cents"] = byMonth[i]["approved_cents"].(int64) + f.Cents //nolint:forcetypeassert,errcheck // the report's own map, its types known
+			byMonth[i]["approvals"] = byMonth[i]["approvals"].(int) + 1                   //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		case "agreement.sent":
-			byMonth[i]["sent_cents"] = byMonth[i]["sent_cents"].(int64) + f.Cents
+			byMonth[i]["sent_cents"] = byMonth[i]["sent_cents"].(int64) + f.Cents //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		}
 	}
 
@@ -483,11 +486,11 @@ func (r *report) money() map[string]any {
 		}
 	}
 	sort.SliceStable(clients, func(i, j int) bool {
-		a, b := clients[i]["agreed_cents"].(int64), clients[j]["agreed_cents"].(int64)
+		a, b := clients[i]["agreed_cents"].(int64), clients[j]["agreed_cents"].(int64) //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		if a != b {
 			return a > b
 		}
-		return clients[i]["this_year_cents"].(int64) > clients[j]["this_year_cents"].(int64)
+		return clients[i]["this_year_cents"].(int64) > clients[j]["this_year_cents"].(int64) //nolint:forcetypeassert,errcheck // the report's own map, its types known
 	})
 	if len(clients) > 10 {
 		clients = clients[:10]
@@ -669,7 +672,7 @@ func (r *report) reach() map[string]any {
 	}
 	for _, c := range r.rows {
 		if i, ok := idx[c.CreatedAt.In(r.loc).Format("2006-01")]; ok {
-			newBy[i]["count"] = newBy[i]["count"].(int) + 1
+			newBy[i]["count"] = newBy[i]["count"].(int) + 1 //nolint:forcetypeassert,errcheck // the report's own map, its types known
 		}
 	}
 	var far float64

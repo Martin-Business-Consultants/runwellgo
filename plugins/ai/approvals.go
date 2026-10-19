@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
@@ -123,19 +124,22 @@ func (a *approval) mayDecide(c *plugin.Caller) bool {
 // above), and for a permission the owners (who hold every one).
 func (a *approval) approverIDs(ctx context.Context, api *plugin.API) []int64 {
 	out := slices.Clone(a.Approvers.UserIDs)
-	if a.Approvers.Role != "" || a.Approvers.Capability != "" {
-		if users, err := api.Records(ctx, plugin.Query{Type: "User", Limit: 500}); err == nil {
-			for _, u := range users {
-				role, id := str(u["role"]), intOf(u["id"])
-				if active, ok := u["active"].(bool); ok && !active {
-					continue
-				}
-				if (a.Approvers.Role != "" && roleRank[role] >= roleRank[a.Approvers.Role] && roleRank[a.Approvers.Role] > 0) ||
-					(a.Approvers.Capability != "" && role == "owner") {
-					if !slices.Contains(out, id) {
-						out = append(out, id)
-					}
-				}
+	if a.Approvers.Role == "" && a.Approvers.Capability == "" {
+		return out
+	}
+	users, err := api.Records(ctx, plugin.Query{Type: "User", Limit: 500})
+	if err != nil {
+		return out
+	}
+	for _, u := range users {
+		role, id := str(u["role"]), intOf(u["id"])
+		if active, ok := u["active"].(bool); ok && !active {
+			continue
+		}
+		if (a.Approvers.Role != "" && roleRank[role] >= roleRank[a.Approvers.Role] && roleRank[a.Approvers.Role] > 0) ||
+			(a.Approvers.Capability != "" && role == "owner") {
+			if !slices.Contains(out, id) {
+				out = append(out, id)
 			}
 		}
 	}
@@ -294,13 +298,15 @@ func proposed(ctx context.Context, api *plugin.API, chatID int64, userID int64, 
 		sid                    int64
 	}
 	var list []pend
-	for rows.Next() {
+	if err := eachRow(rows, func(rows *sql.Rows) error {
 		var p pend
 		if rows.Scan(&p.callID, &p.args, &p.why, &p.typ, &p.sid) == nil {
 			list = append(list, p)
 		}
+		return nil
+	}); err != nil {
+		return nil
 	}
-	rows.Close()
 	people := peopleNames(ctx, api)
 	var ids []int64
 	for _, p := range list {
@@ -440,17 +446,18 @@ func listApprovals(ctx context.Context, api *plugin.API, req *plugin.Request) (*
 		return nil, err
 	}
 	var list []*approval
-	for rows.Next() {
+	if err := eachRow(rows, func(rows *sql.Rows) error {
 		a, err := scanApproval(rows)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		if a.visibleTo(req.Actor) {
 			list = append(list, a)
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	rows.Close()
 	people := peopleNames(ctx, api)
 	out := []map[string]any{}
 	for _, a := range list {
@@ -458,23 +465,23 @@ func listApprovals(ctx context.Context, api *plugin.API, req *plugin.Request) (*
 	}
 	sources := []map[string]any{}
 	if rows, err := api.Query(ctx, `SELECT DISTINCT source FROM ai_approvals ORDER BY source`); err == nil {
-		for rows.Next() {
+		_ = eachRow(rows, func(rows *sql.Rows) error { // a filter's options: what was read is enough
 			var s string
 			if rows.Scan(&s) == nil {
 				sources = append(sources, map[string]any{"value": s, "label": sourceName(s)})
 			}
-		}
-		rows.Close()
+			return nil
+		})
 	}
 	peopleOpts := []map[string]any{}
 	if rows, err := api.Query(ctx, `SELECT DISTINCT requested_by FROM ai_approvals WHERE requested_by IS NOT NULL`); err == nil {
-		for rows.Next() {
+		_ = eachRow(rows, func(rows *sql.Rows) error { // a filter's options: what was read is enough
 			var id int64
 			if rows.Scan(&id) == nil && people[id] != "" {
-				peopleOpts = append(peopleOpts, map[string]any{"value": fmt.Sprint(id), "label": people[id]})
+				peopleOpts = append(peopleOpts, map[string]any{"value": strconv.FormatInt(id, 10), "label": people[id]})
 			}
-		}
-		rows.Close()
+			return nil
+		})
 	}
 	statusOpts := []map[string]any{{"value": "waiting", "label": "Waiting"}, {"value": "approved", "label": "Approved"}, {"value": "declined", "label": "Declined"},
 		{"value": "withdrawn", "label": "Withdrawn"}, {"value": "all", "label": "All"}}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -122,12 +123,7 @@ func subjectOf(ctx context.Context, api *plugin.API, record string, types []stri
 }
 
 func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 // clientOf is the client a record belongs to (0 for none): itself, its
@@ -587,34 +583,13 @@ func reply(ctx context.Context, api *plugin.API, chatID int64, caller *plugin.Ca
 		// Tools run only when the model stopped to call them: a refusal or a
 		// cut-short answer leaves its calls unrun, and says so.
 		run := ans.Stop == "tool_use"
-		waiting := false
-		for i, call := range ans.Calls {
-			args, _ := json.Marshal(inputOf(call.Input))
-			now := store.Now().DB()
-			res, err := api.Exec(ctx, `INSERT INTO ai_tool_calls (ai_message_id, tool_call_id, name, arguments, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				msgID, call.ID, call.Name, string(args), i, now, now)
-			if err != nil {
-				api.Log("reply: " + err.Error())
-				return
-			}
-			rowID, _ := res.LastInsertId()
-			result, isError, pending := "This wasn't run.", true, false
-			if run {
-				result, isError, pending = r.call(ctx, call.Name, call.Input)
-			}
-			if pending {
-				waiting = true
-				continue
-			}
-			if _, err := api.Exec(ctx, `UPDATE ai_tool_calls SET result = ?, is_error = ?, updated_at = ? WHERE id = ?`, result, isError, store.Now().DB(), rowID); err != nil {
-				api.Log("reply: " + err.Error())
-				return
-			}
+		waiting, kept := saveCalls(ctx, api, r, msgID, ans.Calls, run)
+		if !kept {
+			return
 		}
-		if waiting && contact == nil {
+		if sr, ok := r.(*staffRunner); waiting && ok { // staff's, when there's no contact
 			// Into the person's Approvals too; they're looking at the panel,
 			// so their bell isn't rung.
-			sr := r.(*staffRunner)
 			proposed(ctx, api, chatID, caller.ID, "ask", 0, func(name string) string {
 				if t := sr.find(ctx, name); t != nil && t.Title != "" {
 					return t.Title
@@ -626,6 +601,36 @@ func reply(ctx context.Context, api *plugin.API, chatID int64, caller *plugin.Ca
 			return
 		}
 	}
+}
+
+// saveCalls keeps an answer's tool calls, running each when run: waiting
+// when one is a change that waits on the person, and not kept when one
+// couldn't be saved (said in the log).
+func saveCalls(ctx context.Context, api *plugin.API, r runner, msgID int64, calls []toolCall, run bool) (waiting, kept bool) {
+	for i, call := range calls {
+		args, _ := json.Marshal(inputOf(call.Input))
+		now := store.Now().DB()
+		res, err := api.Exec(ctx, `INSERT INTO ai_tool_calls (ai_message_id, tool_call_id, name, arguments, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			msgID, call.ID, call.Name, string(args), i, now, now)
+		if err != nil {
+			api.Log("reply: " + err.Error())
+			return false, false
+		}
+		rowID, _ := res.LastInsertId()
+		result, isError, pending := "This wasn't run.", true, false
+		if run {
+			result, isError, pending = r.call(ctx, call.Name, call.Input)
+		}
+		if pending {
+			waiting = true
+			continue
+		}
+		if _, err := api.Exec(ctx, `UPDATE ai_tool_calls SET result = ?, is_error = ?, updated_at = ? WHERE id = ?`, result, isError, store.Now().DB(), rowID); err != nil {
+			api.Log("reply: " + err.Error())
+			return false, false
+		}
+	}
+	return waiting, true
 }
 
 func saveAssistant(ctx context.Context, api *plugin.API, chatID int64, text string, ans *answer) (int64, error) {
@@ -688,20 +693,21 @@ func loadMessages(ctx context.Context, api *plugin.API, chatID int64) ([]*stored
 	}
 	var out []*storedMessage
 	byID := map[int64]*storedMessage{}
-	for rows.Next() {
+	if err := eachRow(rows, func(rows *sql.Rows) error {
 		m := &storedMessage{}
 		var at store.Time
 		if err := rows.Scan(&m.ID, &m.Role, &m.Content, &m.Raw, &m.Finish, &at, &m.Thinking); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		m.At = at.Time
 		out = append(out, m)
 		byID[m.ID] = m
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	rows.Close()
 	if len(out) == 0 {
-		return out, rows.Err()
+		return out, nil
 	}
 	rows, err = api.Query(ctx, `SELECT t.id, t.ai_message_id, t.tool_call_id, t.name, COALESCE(t.arguments, '{}'), COALESCE(t.approval, ''), t.result, t.is_error
 		FROM ai_tool_calls t JOIN ai_messages m ON m.id = t.ai_message_id WHERE m.ai_chat_id = ? ORDER BY t.ai_message_id, t.position, t.id`, chatID)

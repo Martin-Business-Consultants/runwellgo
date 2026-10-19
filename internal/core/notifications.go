@@ -85,11 +85,12 @@ func familiarName(name string) string {
 	if len(f) <= 1 {
 		return name
 	}
-	out := f[0] + " "
+	var out strings.Builder
+	out.WriteString(f[0] + " ")
 	for _, n := range f[1:] {
-		out += string([]rune(n)[:1]) + "."
+		out.WriteString(string([]rune(n)[:1]) + ".")
 	}
-	return out
+	return out.String()
 }
 
 // notificationMail is the email for a notification (NotificationMailer):

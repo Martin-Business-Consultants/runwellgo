@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"html"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -306,20 +308,18 @@ func (a *App) todosJSON(ctx context.Context, db store.Querier, list []*Todo) ([]
 	}
 	items := map[int64]string{}
 	if itemIDs = workIDs(itemIDs); len(itemIDs) > 0 {
-		rows, err := db.QueryContext(ctx, `SELECT id, description FROM scope_items WHERE id IN (`+store.Placeholders(len(itemIDs))+`)`, idArgs(itemIDs)...)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
+		err := eachRow(ctx, db, `SELECT id, description FROM scope_items WHERE id IN (`+store.Placeholders(len(itemIDs))+`)`, idArgs(itemIDs), func(rows *sql.Rows) error {
 			var id int64
 			var desc string
 			if err := rows.Scan(&id, &desc); err != nil {
-				rows.Close()
-				return nil, err
+				return err
 			}
 			items[id] = desc
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		rows.Close()
 	}
 	custom, err := a.customValues(ctx, db, "Todo", ids)
 	if err != nil {
@@ -811,9 +811,7 @@ func (t *Tx) actorPersonOrUser() any {
 // keeps everyone else; other_owner_ids replaces everyone else.
 func (t *Tx) changeTodo(td *Todo, ch *todoChange) error {
 	fields := map[string]any{}
-	for k, v := range ch.fields {
-		fields[k] = v
-	}
+	maps.Copy(fields, ch.fields)
 	status := td.Status
 	if ch.status != "" {
 		status = ch.status

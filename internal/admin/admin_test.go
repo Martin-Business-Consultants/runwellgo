@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -12,12 +13,12 @@ func TestCSPWidensByPluginSources(t *testing.T) {
 	t.Parallel()
 	h := Handler()
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/reports", nil))
+	h.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/reports", nil))
 	plain := w.Header().Get("Content-Security-Policy")
 	if strings.Contains(plain, "googleapis") || !strings.Contains(plain, "script-src 'self' 'unsafe-inline';") {
 		t.Fatalf("plain policy: %s", plain)
 	}
-	r := httptest.NewRequest("GET", "/reports", nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/reports", nil)
 	r = r.WithContext(WithSources(r.Context(), map[string][]string{"script-src": {"https://maps.googleapis.com"}, "worker-src": {"blob:"}}))
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)

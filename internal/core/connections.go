@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -122,17 +123,12 @@ func (a *App) connections(ctx context.Context, clientID int64) ([]connNode, []co
 		}
 	}
 
-	rows, err := a.store.QueryContext(ctx, `SELECT t.id, t.title, t.status, t.engagement_id, COALESCE(t.scope_item_id, 0) FROM todos t
-		JOIN engagements e ON e.id = t.engagement_id WHERE e.client_id = ? ORDER BY t.engagement_id, t.due_on IS NULL, t.due_on, t.id`, clientID)
-	if err != nil {
-		return nil, nil, err
-	}
-	for rows.Next() {
+	err = eachRow(ctx, a.store, `SELECT t.id, t.title, t.status, t.engagement_id, COALESCE(t.scope_item_id, 0) FROM todos t
+		JOIN engagements e ON e.id = t.engagement_id WHERE e.client_id = ? ORDER BY t.engagement_id, t.due_on IS NULL, t.due_on, t.id`, []any{clientID}, func(rows *sql.Rows) error {
 		var id, eid, sid int64
 		var title, st string
 		if err := rows.Scan(&id, &title, &st, &eid, &sid); err != nil {
-			rows.Close()
-			return nil, nil, err
+			return err
 		}
 		parent := fmt.Sprintf("ScopeItem:%d", sid)
 		if sid == 0 || !have[parent] {
@@ -142,21 +138,19 @@ func (a *App) connections(ctx context.Context, clientID int64) ([]connNode, []co
 		nodes = append(nodes, connNode{ID: tid, Type: "work", Label: title, Detail: humanize(st), State: st, Path: fmt.Sprintf("/work/%d", id), Parent: parent})
 		have[tid] = true
 		link(parent, tid, "has")
-	}
-	rows.Close()
-
-	rows, err = a.store.QueryContext(ctx, `SELECT id, description, due_on, COALESCE(engagement_id, 0) FROM commitments
-		WHERE client_id = ? AND resolution IS NULL ORDER BY due_on, id`, clientID)
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	for rows.Next() {
+
+	err = eachRow(ctx, a.store, `SELECT id, description, due_on, COALESCE(engagement_id, 0) FROM commitments
+		WHERE client_id = ? AND resolution IS NULL ORDER BY due_on, id`, []any{clientID}, func(rows *sql.Rows) error {
 		var id, eid int64
 		var desc string
 		var due any
 		if err := rows.Scan(&id, &desc, &due, &eid); err != nil {
-			rows.Close()
-			return nil, nil, err
+			return err
 		}
 		parent := fmt.Sprintf("Engagement:%d", eid)
 		if !have[parent] {
@@ -165,20 +159,18 @@ func (a *App) connections(ctx context.Context, clientID int64) ([]connNode, []co
 		cid := fmt.Sprintf("Commitment:%d", id)
 		nodes = append(nodes, connNode{ID: cid, Type: "commitment", Label: desc, Detail: "Open", Due: dateOnly(due), State: "open", Path: fmt.Sprintf("/commitments/%d/edit", id), Parent: parent})
 		link(parent, cid, "has")
-	}
-	rows.Close()
-
-	rows, err = a.store.QueryContext(ctx, `SELECT id, subject, status, COALESCE(promoted_type, ''), COALESCE(promoted_id, 0) FROM requests
-		WHERE client_id = ? ORDER BY created_at DESC, id DESC`, clientID)
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	for rows.Next() {
+
+	err = eachRow(ctx, a.store, `SELECT id, subject, status, COALESCE(promoted_type, ''), COALESCE(promoted_id, 0) FROM requests
+		WHERE client_id = ? ORDER BY created_at DESC, id DESC`, []any{clientID}, func(rows *sql.Rows) error {
 		var id, pid int64
 		var subject, st, ptype string
 		if err := rows.Scan(&id, &subject, &st, &ptype, &pid); err != nil {
-			rows.Close()
-			return nil, nil, err
+			return err
 		}
 		rid := fmt.Sprintf("Request:%d", id)
 		nodes = append(nodes, connNode{ID: rid, Type: "request", Label: subject, Detail: humanize(st), State: st, Path: fmt.Sprintf("/requests/%d", id), Parent: clientNode})
@@ -186,9 +178,12 @@ func (a *App) connections(ctx context.Context, clientID int64) ([]connNode, []co
 		if became := fmt.Sprintf("%s:%d", ptype, pid); ptype != "" && have[became] {
 			link(rid, became, "became")
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
-	rows.Close()
-	return nodes, edges, rows.Err()
+	return nodes, edges, nil
 }
 
 // dateOnly is a date column as YYYY-MM-DD, however SQLite gave it.

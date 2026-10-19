@@ -100,11 +100,11 @@ func loadExtras(ctx context.Context, q plugin.Querier, list []*message) (*extras
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var mid, uid int64
 		var emoji string
 		if err := rows.Scan(&mid, &emoji, &uid); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		rs := x.reactions[mid]
@@ -116,38 +116,44 @@ func loadExtras(ctx context.Context, q plugin.Querier, list []*message) (*extras
 		rs[i].UserIDs = append(rs[i].UserIDs, uid)
 		x.reactions[mid] = rs
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	rows, err = q.Query(ctx, `SELECT id, message_id, file_id, filename, COALESCE(content_type, ''), byte_size, COALESCE(width, 0), COALESCE(height, 0)
 		FROM chat_files WHERE message_id IN (`+placeholders(len(mids))+`) ORDER BY id`, anys(mids)...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var f chatFile
 		if err := rows.Scan(&f.ID, &f.MessageID, &f.FileID, &f.Filename, &f.Type, &f.Size, &f.Width, &f.Height); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		x.files[f.MessageID] = append(x.files[f.MessageID], f)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	if len(parents) > 0 {
 		// An agent's reply isn't its person's: they're shown by the thread.
 		rows, err = q.Query(ctx, `SELECT parent_id, user_id FROM chat_messages WHERE parent_id IN (`+placeholders(len(parents))+`) AND deleted_at IS NULL AND agent IS NULL ORDER BY id`, anys(parents)...)
 		if err != nil {
 			return nil, err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			var pid, uid int64
 			if err := rows.Scan(&pid, &uid); err != nil {
-				rows.Close()
 				return nil, err
 			}
 			if !contains(x.repliers[pid], uid) && len(x.repliers[pid]) < 4 {
 				x.repliers[pid] = append(x.repliers[pid], uid)
 			}
 		}
-		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	return x, nil
 }
@@ -310,6 +316,17 @@ func richText(api *plugin.API, body string) plugin.RichText {
 // maxBody is the most a message says (its HTML).
 const maxBody = 40000
 
+// viaOf is what an agent's message is sent via ("" for a person's own).
+func viaOf(me *plugin.Caller) string {
+	if !me.Agent {
+		return ""
+	}
+	if me.Via == "" {
+		return "an agent"
+	}
+	return me.Via
+}
+
 func sendMessage(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin.Response, error) {
 	me, res := caller(req)
 	if res != nil {
@@ -342,13 +359,7 @@ func sendMessage(ctx context.Context, api *plugin.API, req *plugin.Request) (*pl
 			return invalid("parent_id", "isn't a message in this conversation to reply to"), nil
 		}
 	}
-	via := ""
-	if me.Agent {
-		via = me.Via
-		if via == "" {
-			via = "an agent"
-		}
-	}
+	via := viaOf(me)
 	now := stamp()
 	var id int64
 	err = api.Tx(ctx, func(q plugin.Querier) error {
@@ -467,7 +478,7 @@ func own(ctx context.Context, api *plugin.API, me *plugin.Caller, id int64, dele
 	if m.Agent != "" && !deleting {
 		return nil, refuse(http.StatusForbidden, "That reply was written by an agent: delete it instead."), nil
 	}
-	if m.UserID != me.ID && !(deleting && me.Role == "owner") {
+	if m.UserID != me.ID && (!deleting || me.Role != "owner") {
 		return nil, refuse(http.StatusForbidden, "You can only change your own messages."), nil
 	}
 	return m, nil, nil
@@ -521,16 +532,18 @@ func deleteMessage(ctx context.Context, api *plugin.API, req *plugin.Request) (*
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var fileIDs []int64
 	for rows.Next() {
 		var f int64
 		if err := rows.Scan(&f); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		fileIDs = append(fileIDs, f)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	for _, f := range fileIDs {
 		if err := api.Detach(ctx, "Chat::Message", m.ID, f); err != nil && plugin.Answer(err) == nil {
 			return nil, err
@@ -658,16 +671,18 @@ func search(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin.
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var found []int64
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		found = append(found, id)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	list := []*message{}
 	if len(found) > 0 {
 		if list, err = scanMessages(ctx, api, `WHERE id IN (`+placeholders(len(found))+`) ORDER BY id DESC`, anys(found)...); err != nil {

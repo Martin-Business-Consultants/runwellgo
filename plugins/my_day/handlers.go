@@ -119,22 +119,22 @@ func showDay(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin
 	if !ok {
 		open, ok = d.first()
 	}
-	matching := ""
+	var matching strings.Builder
 	if d.query != "" {
-		matching = ", matching “" + d.query + "”"
+		matching.WriteString(", matching “" + d.query + "”")
 	}
 	for _, c := range out.Clients {
 		if c.ID == clientID {
-			matching += ", for " + c.Label
+			matching.WriteString(", for " + c.Label)
 		}
 	}
 	for _, e := range out.Engagements {
 		if e.ID == engID {
-			matching += ", under " + e.Label
+			matching.WriteString(", under " + e.Label)
 		}
 	}
 	out.Summary = fmt.Sprintf("%s of %d, %s of work (%s%s)", plural(len(d.priorities), "priority", "priorities"), limit,
-		plural(len(d.todos), "piece", "pieces"), strings.ToLower(showLabels[d.show]), matching)
+		plural(len(d.todos), "piece", "pieces"), strings.ToLower(showLabels[d.show]), matching.String())
 	if ok {
 		j := openJSON{todoJSON: d.json(open), Description: agentText(open.Description)}
 		if i := slices.IndexFunc(d.priorities, func(t todo) bool { return t.ID == open.ID }); i >= 0 {

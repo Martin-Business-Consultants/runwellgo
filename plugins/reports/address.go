@@ -226,7 +226,7 @@ func geocodeClients(ctx context.Context, api *plugin.API, ids []int64) error {
 	}
 	for id, addr := range addrs {
 		if ctx.Err() != nil {
-			return nil // the rest next time
+			return nil //nolint:nilerr // out of time: the rest next time
 		}
 		row, ok := have[id]
 		if addr == "" {
@@ -324,7 +324,7 @@ func googleGeocode(ctx context.Context, api *plugin.API, key, addr string) (Plac
 		}
 	}
 	q := url.Values{"address": {addr}, "key": {key}, "language": {"en"}}
-	r, err := http.NewRequestWithContext(ctx, "GET", "https://"+googleAPIs+"/maps/api/geocode/json?"+q.Encode(), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+googleAPIs+"/maps/api/geocode/json?"+q.Encode(), nil)
 	if err != nil {
 		return Place{}, err
 	}
@@ -378,7 +378,7 @@ func readGoogle(body []byte) ([]Place, error) {
 	switch ans.Status {
 	case "OK", "ZERO_RESULTS":
 	default:
-		return nil, fmt.Errorf("Google answered %s: %s", ans.Status, ans.ErrorMessage)
+		return nil, fmt.Errorf("Google answered %s: %s", ans.Status, ans.ErrorMessage) //nolint:staticcheck // a proper name, shown to the person as it is
 	}
 	out := []Place{}
 	for _, res := range ans.Results {

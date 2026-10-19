@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,21 @@ import (
 )
 
 // Small helpers the areas share.
+
+// eachRow runs fn on each row query finds, then is the rows' own error.
+func eachRow(ctx context.Context, db store.Querier, query string, args []any, fn func(*sql.Rows) error) error {
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := fn(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
 
 // humanize is "work_order" → "Work order".
 func humanize(s string) string {
@@ -24,7 +40,7 @@ func humanize(s string) string {
 // word as given when it already ends in s).
 func pluralize(n int, word string) string {
 	if n == 1 {
-		return fmt.Sprintf("1 %s", strings.TrimSuffix(word, "s"))
+		return "1 " + strings.TrimSuffix(word, "s")
 	}
 	if !strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "work") {
 		word += "s"

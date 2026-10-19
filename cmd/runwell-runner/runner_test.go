@@ -81,7 +81,7 @@ func (f *fakeRunwell) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if r.Header.Get("Authorization") != "Bearer rwm_test" {
-		w.WriteHeader(401)
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/x/runners/machine")
@@ -105,13 +105,13 @@ func (f *fakeRunwell) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.result = &res
 		io.WriteString(w, `{}`)
 	default:
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -164,7 +164,7 @@ func TestRunnerDoesAJob(t *testing.T) {
 	if !strings.Contains(log.String(), "prompt has") {
 		t.Fatalf("the agent's output didn't reach the log:\n%s", log.String())
 	}
-	out, err := exec.Command("git", "--git-dir", bare, "log", "--format=%s", "runwell/7-say-hello").Output()
+	out, err := exec.CommandContext(t.Context(), "git", "--git-dir", bare, "log", "--format=%s", "runwell/7-say-hello").Output()
 	if err != nil || !strings.HasPrefix(string(out), "Say hello") {
 		t.Fatalf("the branch wasn't pushed: %s %v", out, err)
 	}

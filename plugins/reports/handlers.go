@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +54,7 @@ func moneyReport(ctx context.Context, api *plugin.API, req *plugin.Request) (*pl
 	if m["hidden"] == true {
 		return plugin.JSON(200, m), nil
 	}
-	m["summary"] = fmt.Sprintf("%s agreed on open %s, %s approved this year.", dollars(m["agreed_cents"].(int64)), r.words.engagementN, dollars(m["this_year_cents"].(int64)))
+	m["summary"] = fmt.Sprintf("%s agreed on open %s, %s approved this year.", dollars(m["agreed_cents"].(int64)), r.words.engagementN, dollars(m["this_year_cents"].(int64))) //nolint:forcetypeassert,errcheck // the report's own map, its types known
 	return plugin.JSON(200, m), nil
 }
 
@@ -175,7 +176,7 @@ func checkin(c *clientRow, contacts []map[string]any, engs []map[string]any, us 
 	for _, ct := range contacts {
 		// The first name, past a title (Dr., Ms.).
 		if n, _ := ct["name"].(string); n != "" {
-			for _, w := range strings.Fields(n) {
+			for w := range strings.FieldsSeq(n) {
 				if !strings.HasSuffix(w, ".") {
 					name = w
 					break
@@ -238,7 +239,7 @@ func addNote(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin
 
 // dollars is cents as money for an agent's summary.
 func dollars(cents int64) string {
-	whole := fmt.Sprint(cents / 100)
+	whole := strconv.FormatInt(cents/100, 10)
 	for i := len(whole) - 3; i > 0; i -= 3 {
 		whole = whole[:i] + "," + whole[i:]
 	}

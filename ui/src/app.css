@@ -144,11 +144,13 @@
 		text-wrap: balance;
 	}
 	/* A row of tabs scrolls sideways on a narrow screen rather than
-	   widening the page. */
+	   widening the page. Its start stays in reach: the list's own
+	   justify-center utility outranks this layer, and centring a row
+	   wider than the screen cuts off its first tabs. */
 	[data-slot="tabs-list"] {
 		max-inline-size: 100%;
 		overflow-x: auto;
-		justify-content: flex-start;
+		justify-content: flex-start !important;
 		scrollbar-width: none;
 	}
 	/* Dates, counts and money line up in columns. */

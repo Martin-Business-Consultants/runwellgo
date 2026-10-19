@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,7 @@ func (r *runner) do(ctx context.Context, cancel context.CancelCauseFunc, job *Jo
 	log := r.log.With("job", job.ID, "repo", job.Repo)
 	log.Info("job claimed", "branch", job.Branch)
 	out := newStreamer(r.client, job.ID, r.red, func() { cancel(errCancelled) })
-	go out.run(ctx)
+	go out.run(ctx) //nolint:gosec // G118: it does run on ctx; the Background below is finish's, reported while stopping
 	result := r.work(ctx, job, out)
 	result.DurationSeconds = int64(time.Since(began).Seconds())
 	if result.Branch == "" {
@@ -51,13 +52,7 @@ func (r *runner) work(ctx context.Context, job *Job, out *streamer) Result {
 		out.say(msg)
 		return Result{Outcome: "refused", Error: msg}
 	}
-	timeout := time.Duration(job.TimeoutMinutes) * time.Minute
-	if r.cfg.TimeoutMinutes > 0 && (timeout == 0 || time.Duration(r.cfg.TimeoutMinutes)*time.Minute < timeout) {
-		timeout = time.Duration(r.cfg.TimeoutMinutes) * time.Minute
-	}
-	if timeout <= 0 {
-		timeout = time.Hour
-	}
+	timeout := r.timeout(job)
 	ctx, stop := context.WithTimeoutCause(ctx, timeout, fmt.Errorf("timed out after %s", timeout))
 	defer stop()
 	ended := func(step string, err error) Result {
@@ -106,19 +101,8 @@ func (r *runner) work(ctx context.Context, job *Job, out *streamer) Result {
 	}
 
 	// The tools the repository pins.
-	if hasAny(repo, "mise.toml", ".mise.toml", ".tool-versions") {
-		if _, err := exec.LookPath("mise"); err != nil {
-			out.say("The repository pins tools with mise, but mise isn't installed here: going on without.")
-		} else {
-			out.say("Installing the repository's tools with mise…")
-			_ = r.cmd(ctx, out, repo, nil, "mise", "trust", "--yes", repo)
-			if err := r.cmd(ctx, out, repo, nil, "mise", "install"); err != nil {
-				if ctx.Err() != nil {
-					return ended("installing tools", err)
-				}
-				out.say("mise install failed: going on, the agent may manage without.")
-			}
-		}
+	if err := r.installTools(ctx, out, repo); err != nil {
+		return ended("installing tools", err)
 	}
 
 	branch := job.Branch
@@ -137,9 +121,9 @@ func (r *runner) work(ctx context.Context, job *Job, out *streamer) Result {
 	}
 
 	// The agent.
-	command := expand(r.cfg.Agent, map[string]string{"prompt_file": promptFile, "workdir": repo, "branch": branch, "job_id": fmt.Sprint(job.ID)})
+	command := expand(r.cfg.Agent, map[string]string{"prompt_file": promptFile, "workdir": repo, "branch": branch, "job_id": strconv.FormatInt(job.ID, 10)})
 	out.say("Running the agent: " + r.cfg.Agent)
-	env := []string{"RUNWELL_JOB_ID=" + fmt.Sprint(job.ID), "RUNWELL_PROMPT_FILE=" + promptFile, "RUNWELL_SUMMARY_FILE=" + summaryFile,
+	env := []string{"RUNWELL_JOB_ID=" + strconv.FormatInt(job.ID, 10), "RUNWELL_PROMPT_FILE=" + promptFile, "RUNWELL_SUMMARY_FILE=" + summaryFile,
 		"RUNWELL_BRANCH=" + branch, "RUNWELL_WORKDIR=" + repo, "RUNWELL_REPO=" + job.Repo, "RUNWELL_WORK_URL=" + job.WorkURL}
 	last := &lastMessage{}
 	out.watch = last.see
@@ -171,19 +155,7 @@ func (r *runner) work(ctx context.Context, job *Job, out *streamer) Result {
 	}
 	out.say(fmt.Sprintf("%d files changed.", len(files)))
 	if _, err := r.output(ctx, repo, "git", "diff", "--cached", "--quiet"); err != nil {
-		title := job.Title
-		if title == "" {
-			title = "Runwell job " + fmt.Sprint(job.ID)
-		}
-		msg := fmt.Sprintf("%s\n\nDone by a Runwell runner for job %d.", title, job.ID)
-		if job.WorkURL != "" {
-			msg += "\n" + job.WorkURL
-		}
-		args := []string{"commit", "-q", "-m", msg}
-		if name, _ := r.output(ctx, repo, "git", "config", "user.name"); name == "" {
-			args = append([]string{"-c", "user.name=Runwell runner", "-c", "user.email=runner@runwell.invalid"}, args...)
-		}
-		if err := r.cmd(ctx, out, repo, nil, "git", args...); err != nil {
+		if err := r.commit(ctx, out, repo, job); err != nil {
 			return ended("committing", err)
 		}
 	}
@@ -213,11 +185,63 @@ func (r *runner) work(ctx context.Context, job *Job, out *streamer) Result {
 	return res
 }
 
+// timeout is how long the job may take: its own limit, or the runner's
+// when that's shorter, or an hour.
+func (r *runner) timeout(job *Job) time.Duration {
+	timeout := time.Duration(job.TimeoutMinutes) * time.Minute
+	if r.cfg.TimeoutMinutes > 0 && (timeout == 0 || time.Duration(r.cfg.TimeoutMinutes)*time.Minute < timeout) {
+		timeout = time.Duration(r.cfg.TimeoutMinutes) * time.Minute
+	}
+	if timeout <= 0 {
+		timeout = time.Hour
+	}
+	return timeout
+}
+
+// installTools installs the tools the repository pins with mise, when it
+// can; it fails only when the job's context ended while it did.
+func (r *runner) installTools(ctx context.Context, out *streamer, repo string) error {
+	if !hasAny(repo, "mise.toml", ".mise.toml", ".tool-versions") {
+		return nil
+	}
+	if _, err := exec.LookPath("mise"); err != nil {
+		out.say("The repository pins tools with mise, but mise isn't installed here: going on without.")
+		return nil //nolint:nilerr // no mise is no tools, said, and the job goes on
+	}
+	out.say("Installing the repository's tools with mise…")
+	_ = r.cmd(ctx, out, repo, nil, "mise", "trust", "--yes", repo) // mise install says what's wrong, if anything
+	if err := r.cmd(ctx, out, repo, nil, "mise", "install"); err != nil {
+		if ctx.Err() != nil {
+			return err
+		}
+		out.say("mise install failed: going on, the agent may manage without.")
+	}
+	return nil
+}
+
+// commit commits what's staged, as the job, as the runner when git
+// doesn't know who's committing.
+func (r *runner) commit(ctx context.Context, out *streamer, repo string, job *Job) error {
+	title := job.Title
+	if title == "" {
+		title = "Runwell job " + strconv.FormatInt(job.ID, 10)
+	}
+	msg := fmt.Sprintf("%s\n\nDone by a Runwell runner for job %d.", title, job.ID)
+	if job.WorkURL != "" {
+		msg += "\n" + job.WorkURL
+	}
+	args := []string{"commit", "-q", "-m", msg}
+	if name, _ := r.output(ctx, repo, "git", "config", "user.name"); name == "" {
+		args = append([]string{"-c", "user.name=Runwell runner", "-c", "user.email=runner@runwell.invalid"}, args...)
+	}
+	return r.cmd(ctx, out, repo, nil, "git", args...)
+}
+
 // wouldOpen logs the pull request it would have opened.
 func (r *runner) wouldOpen(out *streamer, job *Job, branch, base, summary string) {
 	title, body := prText(job, summary, nil)
 	out.say(fmt.Sprintf("Would open a pull request %s → %s: %q", branch, base, title))
-	for _, l := range strings.Split(body, "\n") {
+	for l := range strings.SplitSeq(body, "\n") {
 		out.say("  " + l)
 	}
 }
@@ -307,7 +331,7 @@ func (r *runner) cleanup(ctx context.Context, c Cleanup) {
 
 // cmd runs a command in dir, its output going to the job's log.
 func (r *runner) cmd(ctx context.Context, out *streamer, dir string, env []string, name string, args ...string) error {
-	c := exec.CommandContext(ctx, name, args...)
+	c := exec.CommandContext(ctx, name, args...) //nolint:gosec // git, gh, mise, or sh running the operator's configured agent
 	c.Dir = dir
 	c.Env = append(childEnv(), env...)
 	c.Stdin = nil
@@ -349,7 +373,7 @@ func (r *runner) cmd(ctx context.Context, out *streamer, dir string, env []strin
 
 // output runs a command and answers its trimmed output.
 func (r *runner) output(ctx context.Context, dir, name string, args ...string) (string, error) {
-	c := exec.CommandContext(ctx, name, args...)
+	c := exec.CommandContext(ctx, name, args...) //nolint:gosec // git or gh, as the runner's own steps call them
 	c.Dir = dir
 	c.Env = childEnv()
 	var stdout, stderr bytes.Buffer
@@ -385,7 +409,7 @@ func expand(tmpl string, vars map[string]string) string {
 
 func shellQuote(s string) string {
 	if s != "" && strings.IndexFunc(s, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@", r))
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && !strings.ContainsRune("-_./:=@", r)
 	}) < 0 {
 		return s
 	}
@@ -402,7 +426,7 @@ func hasAny(dir string, names ...string) bool {
 }
 
 func readSmall(path string) string {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // the job's own summary file
 	if err != nil {
 		return ""
 	}

@@ -197,6 +197,9 @@ func showSettings(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 		}
 		counts[s] = n
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	sections := []map[string]any{}
 	for _, s := range Sections {
 		sections = append(sections, map[string]any{"key": s.Key, "label": s.Label, "help": s.Help})
@@ -337,16 +340,18 @@ func hiddenClients(ctx context.Context, api *plugin.API) ([]map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var ids []int64
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	out := []map[string]any{}
 	if len(ids) == 0 {
 		return out, nil

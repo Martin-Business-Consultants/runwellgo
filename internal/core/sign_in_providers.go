@@ -200,7 +200,7 @@ func (a *App) updateSignInProvider(c *Ctx) error {
 			}
 		}
 		if err := fullInvalid(bad); err != nil {
-			e := err.(*apierr.Error)
+			e, _ := errors.AsType[*apierr.Error](err) // fullInvalid's error is always one
 			e.Message = a.providerName(ctx, key) + ": " + e.Message
 			return e
 		}
@@ -441,7 +441,7 @@ func (a *App) signedInStaff(c *Ctx) *User {
 func (a *App) providerFailure(c *Ctx, key string) error {
 	msg := "Signing in with " + a.providerName(c.R.Context(), key) + " didn’t work. Try again, or use your password."
 	if a.signedInStaff(c) != nil {
-		return redirectTo(c, "/settings/account", "alert", msg)
+		return redirectTo(c, "/settings/account?tab=security", "alert", msg)
 	}
 	return redirectTo(c, "/", "alert", msg)
 }
@@ -680,7 +680,7 @@ func (a *App) connectIdentity(c *Ctx, me *User, provider string, acct *providerA
 		return err
 	}
 	if id != 0 && owner != me.ID {
-		return redirectTo(c, "/settings/account", "alert", "That "+name+" account is connected to someone else.")
+		return redirectTo(c, "/settings/account?tab=security", "alert", "That "+name+" account is connected to someone else.")
 	}
 	err = a.write(ctx, &Actor{User: me}, func(t *Tx) error {
 		now := store.Now().DB()
@@ -697,7 +697,7 @@ func (a *App) connectIdentity(c *Ctx, me *User, provider string, acct *providerA
 	if err != nil {
 		return err
 	}
-	return redirectTo(c, "/settings/account", "notice", name+" connected. You can sign in with it now.")
+	return redirectTo(c, "/settings/account?tab=security", "notice", name+" connected. You can sign in with it now.")
 }
 
 // providerSignIn signs user in after a provider vouched for them, or sends

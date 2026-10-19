@@ -181,7 +181,7 @@ func resolve(ctx context.Context, api *plugin.API, req *plugin.Request, in place
 	if strings.TrimSpace(in.Query) != "" && in.Lat == nil {
 		found, err := geocode(ctx, api, req, in.Query)
 		if err != nil {
-			return Place{}, plugin.JSON(http.StatusBadGateway, map[string]any{"error": "geocoder", "message": "Couldn't look that place up just now: " + err.Error()}), nil
+			return Place{}, plugin.JSON(http.StatusBadGateway, map[string]any{"error": "geocoder", "message": "Couldn't look that place up just now: " + err.Error()}), nil //nolint:nilerr // answered as a 502
 		}
 		if len(found) == 0 {
 			return Place{}, plugin.Invalid(map[string][]string{"query": {"No place matches that. Try a city and its country."}}), nil
@@ -375,7 +375,7 @@ func searchPlaces(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 	}
 	found, err := geocode(ctx, api, req, q)
 	if err != nil {
-		return plugin.JSON(http.StatusBadGateway, map[string]any{"error": "geocoder", "message": "Couldn't look places up just now. Try again in a moment, or drop the pin on the globe."}), nil
+		return plugin.JSON(http.StatusBadGateway, map[string]any{"error": "geocoder", "message": "Couldn't look places up just now. Try again in a moment, or drop the pin on the globe."}), nil //nolint:nilerr // answered as a 502
 	}
 	return plugin.JSON(200, map[string]any{"places": found}), nil
 }
@@ -470,7 +470,7 @@ func nominatimSearch(ctx context.Context, api *plugin.API, req *plugin.Request, 
 	q.Set("addressdetails", "1")
 	q.Set("accept-language", "en")
 	site, _ := api.Site(ctx)
-	r, err := http.NewRequestWithContext(ctx, "GET", "https://"+nominatim+path+"?"+q.Encode(), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+nominatim+path+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +487,7 @@ func nominatimSearch(ctx context.Context, api *plugin.API, req *plugin.Request, 
 		return nil, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
+	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("the geocoder answered %d", res.StatusCode)
 	}
 	type hit struct {

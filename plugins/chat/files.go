@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif" // an image's size, for its preview
@@ -60,7 +61,7 @@ func readSend(ctx context.Context, api *plugin.API, req *plugin.Request) (sendIn
 	r := multipart.NewReader(bytes.NewReader(req.Body), ps["boundary"])
 	for {
 		part, err := r.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

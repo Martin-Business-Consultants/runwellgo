@@ -97,7 +97,7 @@ var blobDir = regexp.MustCompile(`^[a-z0-9]{2}$`)
 func Stage(ctx context.Context, dataDir, archive string, opts Options) (*Report, error) {
 	zr, err := zip.OpenReader(archive)
 	if err != nil {
-		return nil, fmt.Errorf("%w: it isn't a .zip (%v)", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: it isn't a .zip (%w)", ErrInvalid, err)
 	}
 	defer zr.Close()
 
@@ -105,12 +105,12 @@ func Stage(ctx context.Context, dataDir, archive string, opts Options) (*Report,
 	var database *zip.File
 	isExport := false
 	for _, f := range zr.File {
-		switch {
-		case f.Name == "manifest.json":
+		switch f.Name {
+		case "manifest.json":
 			manifest = f
-		case f.Name == Database:
+		case Database:
 			database = f
-		case f.Name == "data/users.json":
+		case "data/users.json":
 			isExport = true
 		}
 	}
@@ -122,7 +122,7 @@ func Stage(ctx context.Context, dataDir, archive string, opts Options) (*Report,
 	}
 	var m Manifest
 	if err := readJSON(manifest, &m); err != nil {
-		return nil, fmt.Errorf("%w: manifest.json: %v", ErrInvalid, err)
+		return nil, fmt.Errorf("%w: manifest.json: %w", ErrInvalid, err)
 	}
 	if m.Format != Format || m.FormatVersion != 1 {
 		return nil, fmt.Errorf("%w: it says it's %q version %d, not %s version 1", ErrInvalid, m.Format, m.FormatVersion, Format)
@@ -156,10 +156,9 @@ func Stage(ctx context.Context, dataDir, archive string, opts Options) (*Report,
 			}
 			to = filepath.Join(stage, "storage", parts[1], parts[2], parts[3])
 			rep.Files++
-		case name == "manifest.json", name == "README.txt", strings.HasSuffix(name, "/"):
-			continue
 		default:
-			// Anything else is no part of a backup: skipped, never written.
+			// The manifest (read above), the README, directories, and
+			// anything that's no part of a backup: skipped, never written.
 			continue
 		}
 		n, err := extract(f, to)
@@ -181,7 +180,7 @@ func Stage(ctx context.Context, dataDir, archive string, opts Options) (*Report,
 // markPending says which staged import Apply puts in place.
 func markPending(dataDir, stage string, rep *Report) error {
 	raw, _ := json.Marshal(map[string]any{"stage": filepath.Base(stage), "report": rep})
-	return os.WriteFile(filepath.Join(dataDir, pendingFile), raw, 0o640)
+	return os.WriteFile(filepath.Join(dataDir, pendingFile), raw, 0o640) //nolint:gosec // 0640, as the database is: never world-readable
 }
 
 func readJSON(f *zip.File, v any) error {
@@ -200,19 +199,19 @@ func extract(f *zip.File, to string) (int64, error) {
 	}
 	r, err := f.Open()
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s: %v", ErrInvalid, f.Name, err)
+		return 0, fmt.Errorf("%w: %s: %w", ErrInvalid, f.Name, err)
 	}
 	defer r.Close()
-	w, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
+	w, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640) //nolint:gosec // 0640, as the database and blobs are
 	if err != nil {
 		return 0, err
 	}
-	n, err := io.Copy(w, r)
+	n, err := io.Copy(w, r) //nolint:gosec // the operator's own backup, every byte of it wanted
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
-		return n, fmt.Errorf("%w: %s: %v", ErrInvalid, f.Name, err)
+		return n, fmt.Errorf("%w: %s: %w", ErrInvalid, f.Name, err)
 	}
 	return n, nil
 }
@@ -230,7 +229,7 @@ func check(ctx context.Context, path string, rep *Report) error {
 		return fmt.Errorf("%w: the database is damaged (%s%v)", ErrInvalid, integrity, errOr(err))
 	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE agent_owner_id IS NULL AND deactivated_at IS NULL`).Scan(&rep.People); err != nil {
-		return fmt.Errorf("%w: the database isn't Runwell's (%v)", ErrInvalid, err)
+		return fmt.Errorf("%w: the database isn't Runwell's (%w)", ErrInvalid, err)
 	}
 	if rep.People == 0 {
 		return fmt.Errorf("%w: it has nobody who could sign in", ErrInvalid)
@@ -248,7 +247,7 @@ func errOr(err error) string {
 
 // Pending is the staged backup waiting to be applied, nil when there's none.
 func Pending(dataDir string) (*Report, error) {
-	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile))
+	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile)) //nolint:gosec // the data directory's own pending file
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	} else if err != nil {
@@ -265,7 +264,7 @@ func Pending(dataDir string) (*Report, error) {
 
 // Discard drops a staged backup that hasn't been applied.
 func Discard(dataDir string) error {
-	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile))
+	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile)) //nolint:gosec // the data directory's own pending file
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	} else if err != nil {
@@ -284,7 +283,7 @@ func Discard(dataDir string) error {
 // backup's take their place. Nothing may have the database open. It answers
 // where the replaced install went, "" when nothing was pending.
 func Apply(dataDir string) (string, error) {
-	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile))
+	raw, err := os.ReadFile(filepath.Join(dataDir, pendingFile)) //nolint:gosec // the data directory's own pending file
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	} else if err != nil {
@@ -341,7 +340,7 @@ func Apply(dataDir string) (string, error) {
 	// The search index is the database's own in a backup; a data export
 	// leaves it out, so it's rebuilt once Runwell starts.
 	if p.Report != nil && p.Report.Kind == "data" {
-		if err := os.WriteFile(filepath.Join(dataDir, ReindexFile), nil, 0o640); err != nil {
+		if err := os.WriteFile(filepath.Join(dataDir, ReindexFile), nil, 0o640); err != nil { //nolint:gosec // 0640, as the database is
 			return "", err
 		}
 	}
@@ -361,6 +360,6 @@ func HasPeople(dataDir string) bool {
 	}
 	defer db.Close()
 	var n int
-	_ = db.QueryRow(`SELECT count(*) FROM users`).Scan(&n)
+	_ = db.QueryRowContext(context.Background(), `SELECT count(*) FROM users`).Scan(&n) // unreadable is no one
 	return n > 0
 }

@@ -102,22 +102,7 @@ func buildClientReport(ctx context.Context, api *plugin.API, clientID int64, sec
 
 	// The engagements they see (not drafts), newest work first, and the
 	// work shared with them under each.
-	var engs []plugin.EngagementMetrics
-	for _, e := range c.engagements {
-		if e.State == "draft" || e.State == "internal" {
-			continue
-		}
-		if e.ClosedAt != nil && e.ClosedAt.Before(yearAgo) {
-			continue
-		}
-		engs = append(engs, e)
-	}
-	sort.SliceStable(engs, func(i, j int) bool {
-		if (engs[i].ClosedAt == nil) != (engs[j].ClosedAt == nil) {
-			return engs[i].ClosedAt == nil
-		}
-		return engs[i].CreatedAt.After(engs[j].CreatedAt)
-	})
+	engs := portalEngagements(c, yearAgo)
 	work := map[int64][]todoRec{}
 	var shared []todoRec
 	for _, e := range engs {
@@ -144,33 +129,7 @@ func buildClientReport(ctx context.Context, api *plugin.API, clientID int64, sec
 	var summary []string
 
 	if on("engagements") || on("money") {
-		list := []map[string]any{}
-		for _, e := range engs {
-			done, open, late := 0, 0, 0
-			for _, t := range work[e.ID] {
-				switch {
-				case t.Status == "done":
-					done++
-				default:
-					open++
-					if t.DueOn != "" && t.DueOn < r.m.Today {
-						late++
-					}
-				}
-			}
-			progress := 0
-			if done+open > 0 {
-				progress = done * 100 / (done + open)
-			} else if e.ClosedAt != nil {
-				progress = 100
-			}
-			item := map[string]any{"ref": e.Ref, "title": e.Title, "label": e.Label, "state": e.State, "state_words": stateWords(e),
-				"closed": e.ClosedAt != nil, "done": done, "open": open, "late": late, "progress": progress, "path": "/portal/engagements/" + e.Ref}
-			if on("money") && r.m.Prices && e.State != "sent" {
-				item["agreed_cents"], item["shape"], item["cadence"] = e.AgreedCents, e.Shape, e.Cadence
-			}
-			list = append(list, item)
-		}
+		list := engagementItems(r, engs, work, on)
 		if on("engagements") {
 			out["engagements"] = list
 			active := 0
@@ -182,87 +141,26 @@ func buildClientReport(ctx context.Context, api *plugin.API, clientID int64, sec
 			summary = append(summary, plural(active, r.words.engagement1, r.words.engagementN)+" under way")
 		}
 		if on("money") && r.m.Prices {
-			var total, monthly int64
-			by := []map[string]any{}
-			for _, e := range engs {
-				if e.ClosedAt != nil || e.State == "sent" || e.AgreedCents == 0 {
-					continue
-				}
-				total += e.AgreedCents
-				if e.Shape == "recurring" {
-					monthly += perMonth(e.AgreedCents, e.Cadence)
-				}
-				by = append(by, map[string]any{"ref": e.Ref, "title": e.Title, "agreed_cents": e.AgreedCents, "shape": e.Shape, "cadence": e.Cadence})
-			}
-			out["money"] = map[string]any{"agreed_cents": total, "monthly_recurring_cents": monthly, "by_engagement": by}
+			out["money"] = agreedMoney(engs)
 		}
 	}
 
 	if on("work_done") {
-		months := r.months(reportMonths)
-		idx := map[string]int{}
-		by := make([]map[string]any, len(months))
-		for i, m := range months {
-			idx[m] = i
-			by[i] = map[string]any{"month": m, "done": 0}
-		}
-		total := 0
-		for _, t := range shared {
-			if t.Status != "done" || t.CompletedAt == nil {
-				continue
-			}
-			if i, ok := idx[t.CompletedAt.In(r.loc).Format("2006-01")]; ok {
-				by[i]["done"] = by[i]["done"].(int) + 1
-				total++
-			}
-		}
-		out["work_done"] = map[string]any{"months": by, "total": total}
-		summary = append(summary, fmt.Sprintf("%s done in a year", plural(total, r.words.work1, r.words.workN)))
+		o, total := workDone(r, shared)
+		out["work_done"] = o
+		summary = append(summary, plural(total, r.words.work1, r.words.workN)+" done in a year")
 	}
 
 	if on("on_time") {
-		withDue, onTime := 0, 0
-		for _, t := range shared {
-			if t.Status != "done" || t.CompletedAt == nil || t.DueOn == "" || t.CompletedAt.Before(yearAgo) {
-				continue
-			}
-			withDue++
-			if t.CompletedAt.In(r.loc).Format(time.DateOnly) <= t.DueOn {
-				onTime++
-			}
-		}
-		o := map[string]any{"with_due": withDue, "on_time": onTime, "rate": nil}
-		if withDue > 0 {
-			rate := math.Round(float64(onTime) / float64(withDue) * 100)
-			o["rate"] = rate
-			summary = append(summary, fmt.Sprintf("%v%% on time", rate))
+		o, line := onTimeStats(shared, r, yearAgo)
+		if line != "" {
+			summary = append(summary, line)
 		}
 		out["on_time"] = o
 	}
 
 	if on("requests") {
-		received, answered := 0, 0
-		var hours []float64
-		for _, f := range r.m.Facts {
-			if f.ClientID != clientID || f.At.Before(yearAgo) {
-				continue
-			}
-			switch f.Kind {
-			case "request.received":
-				received++
-			case "request.triaged":
-				answered++
-				if f.Start != nil {
-					hours = append(hours, f.At.Sub(*f.Start).Hours())
-				}
-			}
-		}
-		o := map[string]any{"received": received, "answered": answered, "open": c.OpenRequests, "typical_hours": nil}
-		if len(hours) > 0 {
-			sort.Float64s(hours)
-			o["typical_hours"] = math.Round(hours[len(hours)/2]*10) / 10
-		}
-		out["requests"] = o
+		out["requests"] = requestStats(r, c, clientID, yearAgo)
 	}
 
 	var commitments []commitmentRec
@@ -275,79 +173,12 @@ func buildClientReport(ctx context.Context, api *plugin.API, clientID int64, sec
 			return nil, err
 		}
 	}
-	ours := func(cm commitmentRec) bool { return cm.Owner == "us" || strings.HasPrefix(cm.Owner, "user:") }
 	if on("commitments") {
-		mine := map[int64]bool{}
-		open := 0
-		for _, cm := range commitments {
-			if ours(cm) {
-				mine[cm.ID] = true
-				if cm.Open {
-					open++
-				}
-			}
-		}
-		kept, onTime, missed := 0, 0, 0
-		for _, f := range r.m.Facts {
-			if !mine[f.ID] || f.At.Before(yearAgo) {
-				continue
-			}
-			switch f.Kind {
-			case "commitment.done":
-				kept++
-				if f.Due == "" || f.At.In(r.loc).Format(time.DateOnly) <= f.Due {
-					onTime++
-				}
-			case "commitment.missed":
-				missed++
-			}
-		}
-		o := map[string]any{"kept": kept, "kept_on_time": onTime, "missed": missed, "open": open, "rate": nil}
-		if kept+missed > 0 {
-			o["rate"] = math.Round(float64(kept) / float64(kept+missed) * 100)
-		}
-		out["commitments"] = o
+		out["commitments"] = commitmentStats(r, commitments, yearAgo)
 	}
 
 	if on("next") {
-		var upcoming []todoRec
-		for _, t := range shared {
-			if t.Status != "done" {
-				upcoming = append(upcoming, t)
-			}
-		}
-		sort.SliceStable(upcoming, func(i, j int) bool {
-			a, b := upcoming[i].DueOn, upcoming[j].DueOn
-			if (a == "") != (b == "") {
-				return b == ""
-			}
-			return a < b
-		})
-		workList := []map[string]any{}
-		for _, t := range upcoming[:min(8, len(upcoming))] {
-			workList = append(workList, map[string]any{"title": t.Title, "status": t.Status, "due_on": nilIf(t.DueOn), "late": t.DueOn != "" && t.DueOn < r.m.Today,
-				"engagement": t.Engagement.Ref, "path": "/portal/engagements/" + t.Engagement.Ref})
-		}
-		promised, waiting := []map[string]any{}, []map[string]any{}
-		for _, cm := range commitments {
-			if !cm.Open {
-				continue
-			}
-			item := map[string]any{"description": cm.Description, "due_on": nilIf(cm.DueOn), "late": cm.Overdue}
-			if ours(cm) {
-				promised = append(promised, item)
-			} else {
-				waiting = append(waiting, item)
-			}
-		}
-		decide := []map[string]any{}
-		for _, e := range engs {
-			if e.ClosedAt == nil && e.State == "sent" {
-				decide = append(decide, map[string]any{"ref": e.Ref, "title": e.Title, "path": "/portal/engagements/" + e.Ref})
-			}
-		}
-		out["next"] = map[string]any{"work": workList, "more_work": max(0, len(upcoming)-len(workList)), "promised": promised[:min(6, len(promised))],
-			"waiting_on_you": waiting[:min(6, len(waiting))], "to_decide": decide}
+		out["next"] = nextSteps(r, shared, commitments, engs)
 	}
 
 	s := c.Name + "'s progress"
@@ -356,6 +187,229 @@ func buildClientReport(ctx context.Context, api *plugin.API, clientID int64, sec
 	}
 	out["summary"] = s + "."
 	return out, nil
+}
+
+// portalEngagements are the engagements a client sees (not drafts, nor
+// closed over a year ago), open ones first, then newest first.
+func portalEngagements(c *clientRow, yearAgo time.Time) []plugin.EngagementMetrics {
+	var engs []plugin.EngagementMetrics
+	for _, e := range c.engagements {
+		if e.State == "draft" || e.State == "internal" {
+			continue
+		}
+		if e.ClosedAt != nil && e.ClosedAt.Before(yearAgo) {
+			continue
+		}
+		engs = append(engs, e)
+	}
+	sort.SliceStable(engs, func(i, j int) bool {
+		if (engs[i].ClosedAt == nil) != (engs[j].ClosedAt == nil) {
+			return engs[i].ClosedAt == nil
+		}
+		return engs[i].CreatedAt.After(engs[j].CreatedAt)
+	})
+	return engs
+}
+
+// engagementItems are the engagements the report shows, each with its
+// shared work's progress.
+func engagementItems(r *report, engs []plugin.EngagementMetrics, work map[int64][]todoRec, on func(string) bool) []map[string]any {
+	list := []map[string]any{}
+	for _, e := range engs {
+		done, open, late := 0, 0, 0
+		for _, t := range work[e.ID] {
+			switch t.Status {
+			case "done":
+				done++
+			default:
+				open++
+				if t.DueOn != "" && t.DueOn < r.m.Today {
+					late++
+				}
+			}
+		}
+		progress := 0
+		if done+open > 0 {
+			progress = done * 100 / (done + open)
+		} else if e.ClosedAt != nil {
+			progress = 100
+		}
+		item := map[string]any{"ref": e.Ref, "title": e.Title, "label": e.Label, "state": e.State, "state_words": stateWords(e),
+			"closed": e.ClosedAt != nil, "done": done, "open": open, "late": late, "progress": progress, "path": "/portal/engagements/" + e.Ref}
+		if on("money") && r.m.Prices && e.State != "sent" {
+			item["agreed_cents"], item["shape"], item["cadence"] = e.AgreedCents, e.Shape, e.Cadence
+		}
+		list = append(list, item)
+	}
+	return list
+}
+
+// agreedMoney is what's agreed on the open engagements, and monthly.
+func agreedMoney(engs []plugin.EngagementMetrics) map[string]any {
+	var total, monthly int64
+	by := []map[string]any{}
+	for _, e := range engs {
+		if e.ClosedAt != nil || e.State == "sent" || e.AgreedCents == 0 {
+			continue
+		}
+		total += e.AgreedCents
+		if e.Shape == "recurring" {
+			monthly += perMonth(e.AgreedCents, e.Cadence)
+		}
+		by = append(by, map[string]any{"ref": e.Ref, "title": e.Title, "agreed_cents": e.AgreedCents, "shape": e.Shape, "cadence": e.Cadence})
+	}
+	return map[string]any{"agreed_cents": total, "monthly_recurring_cents": monthly, "by_engagement": by}
+}
+
+// workDone is the shared work done each month of the year, and in all.
+func workDone(r *report, shared []todoRec) (map[string]any, int) {
+	months := r.months(reportMonths)
+	idx := map[string]int{}
+	by := make([]map[string]any, len(months))
+	for i, m := range months {
+		idx[m] = i
+		by[i] = map[string]any{"month": m, "done": 0}
+	}
+	total := 0
+	for _, t := range shared {
+		if t.Status != "done" || t.CompletedAt == nil {
+			continue
+		}
+		if i, ok := idx[t.CompletedAt.In(r.loc).Format("2006-01")]; ok {
+			by[i]["done"] = by[i]["done"].(int) + 1 //nolint:forcetypeassert,errcheck // the report's own map, its types known
+			total++
+		}
+	}
+	return map[string]any{"months": by, "total": total}, total
+}
+
+// onTimeStats is how much shared work was done by its due date, and
+// that as a line of the summary ("" when nothing had one).
+func onTimeStats(shared []todoRec, r *report, yearAgo time.Time) (o map[string]any, line string) {
+	withDue, onTime := 0, 0
+	for _, t := range shared {
+		if t.Status != "done" || t.CompletedAt == nil || t.DueOn == "" || t.CompletedAt.Before(yearAgo) {
+			continue
+		}
+		withDue++
+		if t.CompletedAt.In(r.loc).Format(time.DateOnly) <= t.DueOn {
+			onTime++
+		}
+	}
+	o = map[string]any{"with_due": withDue, "on_time": onTime, "rate": nil}
+	if withDue > 0 {
+		rate := math.Round(float64(onTime) / float64(withDue) * 100)
+		o["rate"] = rate
+		line = fmt.Sprintf("%v%% on time", rate)
+	}
+	return o, line
+}
+
+// requestStats is the client's requests this year, and how fast they're
+// answered.
+func requestStats(r *report, c *clientRow, clientID int64, yearAgo time.Time) map[string]any {
+	received, answered := 0, 0
+	var hours []float64
+	for _, f := range r.m.Facts {
+		if f.ClientID != clientID || f.At.Before(yearAgo) {
+			continue
+		}
+		switch f.Kind {
+		case "request.received":
+			received++
+		case "request.triaged":
+			answered++
+			if f.Start != nil {
+				hours = append(hours, f.At.Sub(*f.Start).Hours())
+			}
+		}
+	}
+	o := map[string]any{"received": received, "answered": answered, "open": c.OpenRequests, "typical_hours": nil}
+	if len(hours) > 0 {
+		sort.Float64s(hours)
+		o["typical_hours"] = math.Round(hours[len(hours)/2]*10) / 10
+	}
+	return o
+}
+
+// ours is whether a commitment is the team's (not the client's).
+func ours(cm commitmentRec) bool { return cm.Owner == "us" || strings.HasPrefix(cm.Owner, "user:") }
+
+// commitmentStats is how the team's commitments have been kept this year.
+func commitmentStats(r *report, commitments []commitmentRec, yearAgo time.Time) map[string]any {
+	mine := map[int64]bool{}
+	open := 0
+	for _, cm := range commitments {
+		if ours(cm) {
+			mine[cm.ID] = true
+			if cm.Open {
+				open++
+			}
+		}
+	}
+	kept, onTime, missed := 0, 0, 0
+	for _, f := range r.m.Facts {
+		if !mine[f.ID] || f.At.Before(yearAgo) {
+			continue
+		}
+		switch f.Kind {
+		case "commitment.done":
+			kept++
+			if f.Due == "" || f.At.In(r.loc).Format(time.DateOnly) <= f.Due {
+				onTime++
+			}
+		case "commitment.missed":
+			missed++
+		}
+	}
+	o := map[string]any{"kept": kept, "kept_on_time": onTime, "missed": missed, "open": open, "rate": nil}
+	if kept+missed > 0 {
+		o["rate"] = math.Round(float64(kept) / float64(kept+missed) * 100)
+	}
+	return o
+}
+
+// nextSteps is what's coming: the next shared work, what each side has
+// promised, and what the client has to decide.
+func nextSteps(r *report, shared []todoRec, commitments []commitmentRec, engs []plugin.EngagementMetrics) map[string]any {
+	var upcoming []todoRec
+	for _, t := range shared {
+		if t.Status != "done" {
+			upcoming = append(upcoming, t)
+		}
+	}
+	sort.SliceStable(upcoming, func(i, j int) bool {
+		a, b := upcoming[i].DueOn, upcoming[j].DueOn
+		if (a == "") != (b == "") {
+			return b == ""
+		}
+		return a < b
+	})
+	workList := []map[string]any{}
+	for _, t := range upcoming[:min(8, len(upcoming))] {
+		workList = append(workList, map[string]any{"title": t.Title, "status": t.Status, "due_on": nilIf(t.DueOn), "late": t.DueOn != "" && t.DueOn < r.m.Today,
+			"engagement": t.Engagement.Ref, "path": "/portal/engagements/" + t.Engagement.Ref})
+	}
+	promised, waiting := []map[string]any{}, []map[string]any{}
+	for _, cm := range commitments {
+		if !cm.Open {
+			continue
+		}
+		item := map[string]any{"description": cm.Description, "due_on": nilIf(cm.DueOn), "late": cm.Overdue}
+		if ours(cm) {
+			promised = append(promised, item)
+		} else {
+			waiting = append(waiting, item)
+		}
+	}
+	decide := []map[string]any{}
+	for _, e := range engs {
+		if e.ClosedAt == nil && e.State == "sent" {
+			decide = append(decide, map[string]any{"ref": e.Ref, "title": e.Title, "path": "/portal/engagements/" + e.Ref})
+		}
+	}
+	return map[string]any{"work": workList, "more_work": max(0, len(upcoming)-len(workList)), "promised": promised[:min(6, len(promised))],
+		"waiting_on_you": waiting[:min(6, len(waiting))], "to_decide": decide}
 }
 
 func nilIf(s string) any {
@@ -428,7 +482,7 @@ func clientReport(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 	}
 	out["visible"] = map[string]any{"seen": seen, "page_on": cfg.On, "hidden": hidden, "portal_granted": portal, "why": nilIf(why)}
 	if !seen {
-		out["summary"] = out["summary"].(string) + " They don't see it now: " + strings.TrimSuffix(why, ".") + "."
+		out["summary"] = out["summary"].(string) + " They don't see it now: " + strings.TrimSuffix(why, ".") + "." //nolint:forcetypeassert,errcheck // the report's own map, its types known
 	}
 	return plugin.JSON(200, out), nil
 }

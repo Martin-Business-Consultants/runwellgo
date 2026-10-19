@@ -154,7 +154,7 @@ func (a *App) createDocuments(c *Ctx) error {
 		}
 		return apierr.BadRequest("Send the files as multipart/form-data.")
 	}
-	defer c.R.MultipartForm.RemoveAll()
+	defer func() { _ = c.R.MultipartForm.RemoveAll() }() // best-effort: temp files
 	record := c.R.FormValue("record")
 	if strings.TrimSpace(record) == "" {
 		return &apierr.Error{Status: 422, Code: "refused", Message: "Choose where this goes."}

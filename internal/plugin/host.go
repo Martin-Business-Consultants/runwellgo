@@ -371,7 +371,7 @@ func intersectGrants(granted, asked Grants) Grants {
 func grantsEqual(a, b Grants) bool { return grantsCover(a, b) && grantsCover(b, a) }
 
 // grantsCover says whether granted holds all that's asked for.
-func grantsCover(granted, asked Grants) bool {
+func grantsCover(granted, asked Grants) bool { //nolint:gocyclo // one condition per grant, as Grants lists them
 	if asked.RecordsRead && !granted.RecordsRead || asked.RecordsWrite && !granted.RecordsWrite || asked.Storage && !granted.Storage ||
 		asked.Tables && !granted.Tables || asked.Files && !granted.Files || asked.Mail && !granted.Mail || asked.PublicHTTP && !granted.PublicHTTP ||
 		asked.PrivateHTTP && !granted.PrivateHTTP || asked.Secrets && !granted.Secrets || asked.Tools && !granted.Tools || asked.Portal && !granted.Portal ||

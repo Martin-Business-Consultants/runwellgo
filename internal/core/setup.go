@@ -66,7 +66,7 @@ func (a *App) setupSteps(ctx context.Context) ([]setupStep, error) {
 			exists(`SELECT count(*) FROM clients`), false},
 		{"approver", "Add a contact who can approve", "Agreements go to them to approve or ask for changes.", firstClient,
 			exists(`SELECT count(*) FROM contacts WHERE archived_at IS NULL AND can_approve = 1`), false},
-		{"team", "Invite your team", "Everyone else joins by an emailed link.", "/settings/people",
+		{"team", "Invite your team", "Everyone else joins by an emailed link.", "/settings/people?tab=invite",
 			people > 1 || exists(`SELECT count(*) FROM invitations WHERE accepted_at IS NULL`), true},
 		{"names", "Check the words Runwell uses", "Call clients, " + strings.ToLower(s.Term("engagement", 2)) + " and work whatever your business calls them.", "/settings/names",
 			len(s.Terminology) > 0, true},

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -845,7 +846,7 @@ func (a *App) updateAgreementVersion(c *Ctx) error {
 // sentence is a validation error's messages in one line ("Cadence is not
 // included in the list"), as Rails' full_messages.to_sentence.
 func sentence(err error) string {
-	e, ok := err.(*apierr.Error)
+	e, ok := errors.AsType[*apierr.Error](err)
 	if !ok || e.Errors == nil {
 		return err.Error()
 	}

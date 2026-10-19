@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
@@ -207,16 +208,15 @@ func mine(ctx context.Context, api *plugin.API, d *directory, me int64) ([]map[s
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var list []*conv
 	for rows.Next() {
 		c, err := scanConv(rows)
 		if err != nil {
-			rows.Close()
 			return nil, err
 		}
 		list = append(list, c)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -292,16 +292,18 @@ func listConversations(ctx context.Context, api *plugin.API, req *plugin.Request
 		if err != nil {
 			return nil, err
 		}
+		defer rows.Close()
 		var list []*conv
 		for rows.Next() {
 			c, err := scanConv(rows)
 			if err != nil {
-				rows.Close()
 				return nil, err
 			}
 			list = append(list, c)
 		}
-		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		cids := []int64{}
 		for _, c := range list {
 			cids = append(cids, c.ID)
@@ -314,7 +316,7 @@ func listConversations(ctx context.Context, api *plugin.API, req *plugin.Request
 		for _, c := range list {
 			out = append(out, d.convJSON(c, ms[c.ID], me.ID, 0, 0))
 		}
-		return ok(map[string]any{"summary": fmt.Sprintf("%s you're not in", plural(len(out), "public channel")), "channels": out})
+		return ok(map[string]any{"summary": plural(len(out), "public channel") + " you're not in", "channels": out})
 	}
 	convs, err := mine(ctx, api, d, me.ID)
 	if err != nil {
@@ -322,7 +324,8 @@ func listConversations(ctx context.Context, api *plugin.API, req *plugin.Request
 	}
 	total := 0
 	for _, c := range convs {
-		total += c["unread"].(int)
+		n, _ := c["unread"].(int)
+		total += n
 	}
 	people := []map[string]any{}
 	for _, p := range d.peopleJSON() {
@@ -381,7 +384,7 @@ func dmKey(kind string, userIDs []int64) string {
 	slices.Sort(ids)
 	parts := make([]string, len(ids))
 	for i, id := range ids {
-		parts[i] = fmt.Sprint(id)
+		parts[i] = strconv.FormatInt(id, 10)
 	}
 	return kind + ":" + strings.Join(parts, ",")
 }

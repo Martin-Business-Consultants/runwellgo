@@ -2,6 +2,7 @@ package websitechecklist
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -137,7 +138,7 @@ func show(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin.Re
 }
 
 func failedSite(err error) (*plugin.Response, error) {
-	if err == errNotFound {
+	if errors.Is(err, errNotFound) {
 		return missing("website"), nil
 	}
 	return nil, err
@@ -259,17 +260,19 @@ func workOf(ctx context.Context, api *plugin.API, siteID int64) (map[int64][]obj
 	if err != nil {
 		return nil, err
 	}
+	defer rs.Close()
 	type link struct{ item, todo int64 }
 	var links []link
 	for rs.Next() {
 		var l link
 		if err := rs.Scan(&l.item, &l.todo); err != nil {
-			rs.Close()
 			return nil, err
 		}
 		links = append(links, l)
 	}
-	rs.Close()
+	if err := rs.Err(); err != nil {
+		return nil, err
+	}
 	out := map[int64][]obj{}
 	if len(links) == 0 {
 		return out, nil

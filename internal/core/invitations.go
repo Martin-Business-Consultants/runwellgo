@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -41,7 +42,7 @@ type invitation struct {
 }
 
 func (inv *invitation) expired() bool {
-	return inv.SentAt.Time.Before(time.Now().Add(-invitationExpiresIn))
+	return inv.SentAt.Before(time.Now().Add(-invitationExpiresIn))
 }
 
 const invitationColumns = `i.id, i.email_address, i.role, i.invited_by_id, COALESCE(NULLIF(u.name, ''), u.email_address, ''), i.sent_at`
@@ -262,7 +263,7 @@ func (a *App) acceptInvitation(c *Ctx) error {
 			bad.Add("name", "can't be blank")
 		}
 		if err := checkNewPassword(password, nil); err != nil {
-			e, _ := err.(*apierr.Error)
+			e, _ := errors.AsType[*apierr.Error](err)
 			for _, m := range e.Errors["password"] {
 				bad.Add("password", m)
 			}

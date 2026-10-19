@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -302,7 +303,7 @@ func (a *App) newClientContacts(ctx context.Context, c *Ctx, v any) ([]map[strin
 			inv.Add(fmt.Sprintf("contacts.%d.portal_access", i), "is given with create_contact, once the person has seen what it shares")
 		}
 		fields, err := a.contactParams(ctx, body, false, 0)
-		if bad, ok := err.(*apierr.Error); ok {
+		if bad, ok := errors.AsType[*apierr.Error](err); ok {
 			for field, msgs := range bad.Errors {
 				for _, m := range msgs {
 					inv.Add(fmt.Sprintf("contacts.%d.%s", i, field), m)
@@ -330,7 +331,7 @@ func joinInvalid(errs ...error) error {
 		if err == nil {
 			continue
 		}
-		bad, ok := err.(*apierr.Error)
+		bad, ok := errors.AsType[*apierr.Error](err)
 		if !ok || bad.Errors == nil {
 			return err
 		}

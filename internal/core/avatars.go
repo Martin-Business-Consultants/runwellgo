@@ -30,7 +30,7 @@ func (a *App) avatarRoutes(mux *http.ServeMux) {
 
 // avatarColor is a person's color: crc32 of their id, as Rails picks it.
 func avatarColor(id int64) string {
-	return AvatarColors[crc32.ChecksumIEEE([]byte(strconv.FormatInt(id, 10)))%uint32(len(AvatarColors))]
+	return AvatarColors[crc32.ChecksumIEEE([]byte(strconv.FormatInt(id, 10)))%uint32(len(AvatarColors))] //nolint:gosec // a fixed list of 18
 }
 
 // nameInitials are the first letter of each word, upper case ("Ann Bell" →
@@ -69,7 +69,7 @@ func (a *App) showAvatar(c *Ctx) error {
 		return nil
 	}
 	// Someone else's is cached a while; your own follows a rename at once.
-	etag := fmt.Sprintf(`"avatar-%d-%d"`, id, updated.Time.UnixNano())
+	etag := fmt.Sprintf(`"avatar-%d-%d"`, id, updated.UnixNano())
 	h := c.W.Header()
 	h.Set("ETag", etag)
 	if c.Actor != nil && c.Actor.User != nil && c.Actor.User.Person().ID == id {

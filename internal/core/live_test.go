@@ -43,7 +43,7 @@ func TestLiveHub(t *testing.T) {
 	}
 
 	// Older than what's kept: read again.
-	for i := 0; i < liveKept+5; i++ {
+	for range liveKept + 5 {
 		h.publish("chat", "x", []int64{3}, json.RawMessage(`{}`))
 	}
 	if _, _, resync, _, _ := h.subscribe(3, 1); !resync {
@@ -52,7 +52,7 @@ func TestLiveHub(t *testing.T) {
 
 	// A slow tab is cut off rather than holding the rest up.
 	slow, _, _, _, _ := h.subscribe(4, 0)
-	for i := 0; i < liveBuffer+1; i++ {
+	for range liveBuffer + 1 {
 		h.publish("chat", "x", []int64{4}, json.RawMessage(`{}`))
 	}
 	select {

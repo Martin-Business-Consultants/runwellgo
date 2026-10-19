@@ -142,7 +142,7 @@ type Filter struct {
 }
 
 // validateScreens checks the screens and every place that names one.
-func (m *Manifest) validateScreens() []string {
+func (m *Manifest) validateScreens() []string { //nolint:gocyclo // one check after another, each simple
 	var errs []string
 	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 	seen := map[string]bool{}

@@ -34,9 +34,6 @@ type sortPath struct {
 // by is a column read at path ("client", "display_name").
 func by(path ...string) sortPath { return sortPath{path: path} }
 
-// inOrder is a column whose values sort in the order given.
-func inOrder(order []string, path ...string) sortPath { return sortPath{path: path, order: order} }
-
 // dig is the value at path in an item; nil when it isn't there.
 func dig(v any, path ...string) any {
 	for _, k := range path {

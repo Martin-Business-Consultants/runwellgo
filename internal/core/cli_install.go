@@ -33,6 +33,7 @@ func (a *App) cliInstall(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(script))
 }
 
+//nolint:dupword // a shell script's nested fi
 const cliInstallScript = `#!/bin/sh
 # Installs the runwell CLI for __RUNWELL_URL__
 set -eu

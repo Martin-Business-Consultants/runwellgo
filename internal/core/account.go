@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -236,7 +237,7 @@ func (a *App) updateOwnPassword(c *Ctx) error {
 func formFile(c *Ctx, field string) (multipart.File, *multipart.FileHeader, error) {
 	c.R.Body = http.MaxBytesReader(c.W, c.R.Body, MaxUpload()+1<<20)
 	if err := c.R.ParseMultipartForm(32 << 20); err != nil {
-		if _, ok := err.(*http.MaxBytesError); ok {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return nil, nil, apierr.TooLarge(MaxUpload())
 		}
 		return nil, nil, apierr.BadRequest("Send the file as multipart/form-data, in " + field + ".")
@@ -272,7 +273,7 @@ func (a *App) uploadAvatar(c *Ctx) error {
 	err = a.write(c.R.Context(), c.Actor, func(t *Tx) error {
 		b, err := t.putBlob(h.Filename, ct, f)
 		if err != nil {
-			if err == errTooLarge {
+			if errors.Is(err, errTooLarge) {
 				return apierr.TooLarge(MaxUpload())
 			}
 			return err

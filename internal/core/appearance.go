@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"regexp"
 	"slices"
@@ -89,6 +91,64 @@ func (a *App) showAppearance(c *Ctx) error {
 	return c.JSON(200, out)
 }
 
+// appearanceUpload is a logo or favicon sent with the appearance form.
+type appearanceUpload struct {
+	name, filename, ct string
+	f                  multipart.File
+}
+
+// appearanceForm reads the appearance form as multipart: its fields, what
+// to remove, and the images sent (theirs to close, once there's no error).
+func appearanceForm(c *Ctx) (fields map[string]any, remove string, uploads []appearanceUpload, err error) {
+	defer func() {
+		if err != nil {
+			for _, u := range uploads {
+				_ = u.f.Close() // refused: nothing read from it
+			}
+		}
+	}()
+	fields = map[string]any{}
+	c.R.Body = http.MaxBytesReader(c.W, c.R.Body, MaxUpload()+1<<20)
+	if err := c.R.ParseMultipartForm(32 << 20); err != nil {
+		return nil, "", nil, apierr.BadRequest("Send the files as multipart/form-data.")
+	}
+	for k, v := range c.R.MultipartForm.Value {
+		key := strings.TrimSuffix(strings.TrimPrefix(k, "setting["), "]")
+		if k == "remove" {
+			remove = v[0]
+		} else if len(v) > 0 {
+			fields[key] = v[0]
+		}
+	}
+	for _, name := range []string{"logo", "favicon"} {
+		for _, k := range []string{name, "setting[" + name + "]"} {
+			f, h, err := c.R.FormFile(k)
+			if err != nil {
+				continue
+			}
+			uploads = append(uploads, appearanceUpload{name, h.Filename, "", f})
+			head := make([]byte, 512)
+			n, _ := io.ReadFull(f, head)
+			ct := http.DetectContentType(head[:n])
+			if strings.HasSuffix(strings.ToLower(h.Filename), ".svg") {
+				ct = "image/svg+xml"
+			} else if strings.HasSuffix(strings.ToLower(h.Filename), ".ico") {
+				ct = "image/x-icon"
+			}
+			if !slices.Contains(append(slices.Clone(imageTypes), "image/svg+xml", "image/x-icon", "image/vnd.microsoft.icon"), ct) {
+				bad := apierr.Invalid{}
+				bad.Add(name, "should be a PNG, SVG, JPEG, WebP or ICO image")
+				return fields, remove, uploads, fullInvalid(bad)
+			}
+			if _, err := f.Seek(0, io.SeekStart); err != nil {
+				return fields, remove, uploads, err
+			}
+			uploads[len(uploads)-1].ct = ct
+		}
+	}
+	return fields, remove, uploads, nil
+}
+
 // checkCustomCSS is what's wrong with css, in words; nil when it's safe.
 func checkCustomCSS(css string) []string {
 	var problems []string
@@ -115,49 +175,14 @@ func (a *App) updateAppearance(c *Ctx) error {
 	ctx := c.R.Context()
 	fields := map[string]any{}
 	remove := ""
-	type upload struct {
-		name, filename, ct string
-		r                  io.ReadSeeker
-	}
-	var uploads []upload
+	var uploads []appearanceUpload
 	if strings.HasPrefix(c.R.Header.Get("Content-Type"), "multipart/") {
-		c.R.Body = http.MaxBytesReader(c.W, c.R.Body, MaxUpload()+1<<20)
-		if err := c.R.ParseMultipartForm(32 << 20); err != nil {
-			return apierr.BadRequest("Send the files as multipart/form-data.")
+		var err error
+		if fields, remove, uploads, err = appearanceForm(c); err != nil {
+			return err
 		}
-		for k, v := range c.R.MultipartForm.Value {
-			key := strings.TrimSuffix(strings.TrimPrefix(k, "setting["), "]")
-			if k == "remove" {
-				remove = v[0]
-			} else if len(v) > 0 {
-				fields[key] = v[0]
-			}
-		}
-		for _, name := range []string{"logo", "favicon"} {
-			for _, k := range []string{name, "setting[" + name + "]"} {
-				f, h, err := c.R.FormFile(k)
-				if err != nil {
-					continue
-				}
-				defer f.Close()
-				head := make([]byte, 512)
-				n, _ := io.ReadFull(f, head)
-				ct := http.DetectContentType(head[:n])
-				if strings.HasSuffix(strings.ToLower(h.Filename), ".svg") {
-					ct = "image/svg+xml"
-				} else if strings.HasSuffix(strings.ToLower(h.Filename), ".ico") {
-					ct = "image/x-icon"
-				}
-				if !slices.Contains(append(slices.Clone(imageTypes), "image/svg+xml", "image/x-icon", "image/vnd.microsoft.icon"), ct) {
-					bad := apierr.Invalid{}
-					bad.Add(name, "should be a PNG, SVG, JPEG, WebP or ICO image")
-					return fullInvalid(bad)
-				}
-				if _, err := f.Seek(0, io.SeekStart); err != nil {
-					return err
-				}
-				uploads = append(uploads, upload{name, h.Filename, ct, f})
-			}
+		for _, u := range uploads {
+			defer u.f.Close()
 		}
 	} else {
 		var body struct {
@@ -224,9 +249,9 @@ func (a *App) updateAppearance(c *Ctx) error {
 			}
 		}
 		for _, u := range uploads {
-			b, err := t.putBlob(u.filename, u.ct, u.r)
+			b, err := t.putBlob(u.filename, u.ct, u.f)
 			if err != nil {
-				if err == errTooLarge {
+				if errors.Is(err, errTooLarge) {
 					return apierr.TooLarge(MaxUpload())
 				}
 				return err

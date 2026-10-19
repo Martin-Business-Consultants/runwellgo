@@ -243,7 +243,7 @@ func (a *App) homeTeam(ctx context.Context) ([]Obj, error) {
 			p = O("user", O("id", uid, "name", name), "doing", []Obj{})
 			order = append(order, uid)
 		}
-		if doing := p.Get("doing").([]Obj); len(doing) < 2 {
+		if doing, _ := p.Get("doing").([]Obj); len(doing) < 2 { // set just above
 			p = p.Set("doing", append(doing, O("id", tid, "title", title, "ref", ref, "path", fmt.Sprintf("/work/%d", tid))))
 		}
 		byUser[uid] = p
@@ -256,9 +256,16 @@ func (a *App) homeTeam(ctx context.Context) ([]Obj, error) {
 		out = append(out, byUser[id])
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].Get("user").(Obj).Get("name").(string) < out[j].Get("user").(Obj).Get("name").(string)
+		return userName(out[i]) < userName(out[j])
 	})
 	return out, nil
+}
+
+// userName is the name of the user an Obj{"user": {"name": …}} is about.
+func userName(o Obj) string {
+	u, _ := o.Get("user").(Obj)
+	name, _ := u.Get("name").(string)
+	return name
 }
 
 // homeDiscussion is the latest four notes by others, on anything: what was

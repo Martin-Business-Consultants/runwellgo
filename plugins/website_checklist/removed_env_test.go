@@ -72,9 +72,3 @@ func removedSetup(t *testing.T) (*plugin.Host, *store.DB) {
 	}
 	return h, db
 }
-
-// emitRemoved delivers the core's user.removed as it would after commit.
-func emitRemoved(h *plugin.Host, id, successor int64, name string) {
-	h.Emit(context.Background(), "user.removed", map[string]any{"id": 99, "subject_type": "User", "subject_id": id, "kind": "user.removed",
-		"payload": map[string]any{"id": id, "name": name, "successor_id": successor, "successor_name": "Marcus"}, "source": "app"})
-}

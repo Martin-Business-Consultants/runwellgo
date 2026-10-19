@@ -110,7 +110,7 @@ func (r *runner) loop(ctx context.Context) error {
 	if err := r.beat(ctx); err != nil {
 		var ae *apiError
 		if errors.As(err, &ae) && ae.Status == 401 {
-			return errors.New("Runwell doesn't take this runner's token: it was removed, or the Runners plugin is off")
+			return errors.New("Runwell doesn't take this runner's token: it was removed, or the Runners plugin is off") //nolint:staticcheck // ST1005: Runwell is a name
 		}
 		r.log.Warn("heartbeat", "err", err)
 	}
@@ -177,9 +177,7 @@ func (r *runner) start(ctx context.Context, job *Job) {
 	r.mu.Lock()
 	r.running[job.ID] = cancel
 	r.mu.Unlock()
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		defer func() {
 			r.mu.Lock()
 			delete(r.running, job.ID)
@@ -187,5 +185,5 @@ func (r *runner) start(ctx context.Context, job *Job) {
 			cancel(nil)
 		}()
 		r.do(jctx, cancel, job)
-	}()
+	})
 }

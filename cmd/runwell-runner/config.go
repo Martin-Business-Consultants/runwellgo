@@ -51,7 +51,7 @@ func defaultConfigPath() string {
 }
 
 func loadConfig(path string) (*Config, error) {
-	b, err := os.ReadFile(path)
+	b, err := os.ReadFile(path) //nolint:gosec // the operator's own config
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("no config at %s: run `runwell-runner init` first", path)
 	} else if err != nil {

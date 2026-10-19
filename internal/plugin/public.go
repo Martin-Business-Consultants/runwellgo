@@ -90,7 +90,7 @@ var runningMu sync.Mutex
 func (a *API) Background(name string, fn func(ctx context.Context, api *API)) error {
 	runningMu.Lock()
 	n, _ := running.LoadOrStore(a.key, new(int))
-	count := n.(*int)
+	count := n.(*int) //nolint:errcheck,forcetypeassert // running holds only *int
 	if *count >= backgroundMax {
 		runningMu.Unlock()
 		return fmt.Errorf("this plugin already has %d jobs running; try again in a moment", backgroundMax)
@@ -113,7 +113,7 @@ func (a *API) Background(name string, fn func(ctx context.Context, api *API)) er
 	})
 	if !ok {
 		done()
-		return errors.New("Runwell is shutting down")
+		return errors.New("Runwell is shutting down") //nolint:staticcheck // ST1005: Runwell is a name
 	}
 	return nil
 }

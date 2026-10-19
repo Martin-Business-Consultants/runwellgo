@@ -203,16 +203,15 @@ func handOver(ctx context.Context, api *plugin.API, removedID, successorID int64
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		var todoIDs []int64
 		for rows.Next() {
 			var id int64
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
 				return err
 			}
 			todoIDs = append(todoIDs, id)
 		}
-		rows.Close()
 		if err := rows.Err(); err != nil {
 			return err
 		}

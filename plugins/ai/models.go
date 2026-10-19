@@ -117,7 +117,7 @@ func modelOptions(s *setting) map[string]any {
 	for _, id := range ids {
 		o := modelOption{ID: id, Label: id, Context: contextText(contexts[id]), Price: priceText(p.Key, id)}
 		switch {
-		case id == p.Model && id == p.Fast:
+		case id == p.Model && p.Model == p.Fast:
 			o.Recommended = "both"
 		case id == p.Model:
 			o.Recommended = "main"
@@ -138,7 +138,7 @@ func knownFor() map[string]any {
 		for _, k := range knownModels[p.Key] {
 			o := modelOption{ID: k.ID, Label: k.ID, Context: contextText(k.Context), Price: priceText(p.Key, k.ID)}
 			switch {
-			case k.ID == p.Model && k.ID == p.Fast:
+			case k.ID == p.Model && p.Model == p.Fast:
 				o.Recommended = "both"
 			case k.ID == p.Model:
 				o.Recommended = "main"

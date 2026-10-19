@@ -106,7 +106,8 @@ func terminologyFrom(input map[string]any) map[string]any {
 		m, _ := in[l].(map[string]any)
 		e := pick(m, "one", "other", "prefix")
 		if p, ok := e["prefix"]; ok {
-			if p = nonPrefix.ReplaceAllString(strings.ToUpper(p.(string)), ""); p != "" {
+			ps, _ := p.(string) // pick keeps strings
+			if p = nonPrefix.ReplaceAllString(strings.ToUpper(ps), ""); p != "" {
 				e["prefix"] = p
 			} else {
 				delete(e, "prefix")

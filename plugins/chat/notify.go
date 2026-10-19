@@ -25,15 +25,17 @@ func deliver(ctx context.Context, api *plugin.API, d *directory, c *conv, ms []m
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			var id int64
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
 				return err
 			}
 			involved[id] = true
 		}
-		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
 	}
 	// Who it reaches: the members, and anyone mentioned in a public channel.
 	reach := memberIDs(ms)
@@ -101,7 +103,7 @@ func notification(d *directory, c *conv, ms []member, m *message, parent *messag
 	case parent != nil:
 		title = fmt.Sprintf("%s replied in a thread in %s", who, where)
 	case c.Kind == "dm":
-		title = fmt.Sprintf("%s sent you a message", who)
+		title = who + " sent you a message"
 	case c.Kind == "group":
 		title = fmt.Sprintf("%s wrote to %s", who, where)
 	default:

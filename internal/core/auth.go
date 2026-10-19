@@ -202,7 +202,6 @@ type route struct {
 	auth   bool      // false: open to anyone
 	portal bool      // a client's contact, not staff
 	perm   string    // a permission the staff actor must hold
-	write  bool      // refused to read-only tokens (set for anything not GET)
 	tool   *toolSpec // the agent tool this route is (agent.go)
 }
 

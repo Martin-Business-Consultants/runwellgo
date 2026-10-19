@@ -41,7 +41,7 @@ func TestMachineRoutesTakeOnlyTheirPluginsTokens(t *testing.T) {
 		t.Fatalf("no token: %s", res.Body)
 	}
 	call := func(method, path, token string) int {
-		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(`{}`))
+		req, _ := http.NewRequestWithContext(t.Context(), method, srv.URL+path, strings.NewReader(`{}`))
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}

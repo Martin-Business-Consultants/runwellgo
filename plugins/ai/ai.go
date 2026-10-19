@@ -25,6 +25,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -174,8 +175,7 @@ func missing(what string) *plugin.Response {
 
 // failed answers an error the caller should see, or the plugin failing.
 func failed(err error) (*plugin.Response, error) {
-	var u *unavailable
-	if errors.As(err, &u) {
+	if u, ok := errors.AsType[*unavailable](err); ok {
 		return refuse(http.StatusUnprocessableEntity, u.msg), nil
 	}
 	if res := plugin.Answer(err); res != nil {
@@ -257,6 +257,18 @@ func intOf(v any) int64 {
 		return i
 	}
 	return 0
+}
+
+// eachRow calls fn for every row, closes rows, and returns the first of
+// fn's errors or the iteration's.
+func eachRow(rows *sql.Rows, fn func(*sql.Rows) error) error {
+	defer rows.Close()
+	for rows.Next() {
+		if err := fn(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func truthy(v any) bool {

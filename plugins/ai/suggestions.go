@@ -64,9 +64,7 @@ func refuseUse(format string, args ...any) error { return &refused{fmt.Sprintf(f
 
 func sObject(props map[string]any) map[string]any {
 	req := make([]string, 0, len(props))
-	for _, k := range sortedKeys(props) {
-		req = append(req, k)
-	}
+	req = append(req, sortedKeys(props)...)
 	return map[string]any{"type": "object", "properties": props, "required": req, "additionalProperties": false}
 }
 
@@ -114,6 +112,7 @@ var definitions = map[string]*definition{}
 
 func define(d *definition) { definitions[d.kind] = d }
 
+//nolint:gocyclo // a table of the kinds: each closure is short, and counted as one with the rest
 func init() {
 	define(&definition{kind: "triage", label: "Suggest how to triage", types: []string{"Request"},
 		schema: sObject(map[string]any{
@@ -608,9 +607,9 @@ func (a *applying) noteParents(ctx context.Context) (int64, map[string]any, erro
 	return clientOf(ctx, a.api, rec), engagement, nil
 }
 
-// draft is the engagement's draft agreement version's id; with make, one is
-// started when there's none.
-func (a *applying) draft(ctx context.Context, e map[string]any, make bool) (int64, error) {
+// draft is the engagement's draft agreement version's id; with start, one
+// is started when there's none.
+func (a *applying) draft(ctx context.Context, e map[string]any, start bool) (int64, error) {
 	versions, err := a.api.Records(ctx, plugin.Query{Type: "AgreementVersion", EngagementID: intOf(e["id"]), Limit: 50})
 	if err != nil {
 		return 0, err
@@ -620,7 +619,7 @@ func (a *applying) draft(ctx context.Context, e map[string]any, make bool) (int6
 			return intOf(v["id"]), nil
 		}
 	}
-	if !make {
+	if !start {
 		return 0, nil
 	}
 	out, err := a.api.RunTool(ctx, a.caller, "create_agreement_version", map[string]any{"ref": str(e["ref"])})
@@ -665,15 +664,16 @@ func (a *applying) run(ctx context.Context, tool string, args map[string]any) er
 		return err
 	}
 	if out["status"] == "error" {
-		msg := str(out["summary"])
+		var msg strings.Builder
+		msg.WriteString(str(out["summary"]))
 		if errs, ok := out["errors"].(map[string]any); ok {
 			for field, list := range errs {
 				if l, ok := list.([]any); ok && len(l) > 0 {
-					msg += fmt.Sprintf(" %s %s.", humanize(field), str(l[0]))
+					fmt.Fprintf(&msg, " %s %s.", humanize(field), str(l[0]))
 				}
 			}
 		}
-		return refuseUse("%s", strings.TrimSpace(msg))
+		return refuseUse("%s", strings.TrimSpace(msg.String()))
 	}
 	return nil
 }
@@ -1009,7 +1009,7 @@ func latestSuggestion(ctx context.Context, api *plugin.API, req *plugin.Request)
 	out["excluded"] = ex
 	since := "0000"
 	if d.kind == "day" {
-		since = store.TimeOf(time.Now().Add(-18 * time.Hour)).DB().(string)
+		since, _ = store.TimeOf(time.Now().Add(-18 * time.Hour)).DB().(string) // a set time's is its text
 	}
 	sg, err := scanSuggestion(api.QueryRow(ctx, `SELECT `+suggestionColumns+` FROM ai_suggestions WHERE kind = ? AND subject_type = ? AND subject_id = ? AND user_id = ? AND created_at >= ?
 		ORDER BY created_at DESC LIMIT 1`, d.kind, typ, id, caller.ID, since))
@@ -1055,8 +1055,7 @@ func useSuggestion(ctx context.Context, api *plugin.API, req *plugin.Request) (*
 		a := &applying{gen: gen{api: api, caller: req.Actor, typ: s.SubjectType, id: s.SubjectID, on: str(s.Payload["_on"]), payload: s.Payload}, req: req, selection: selection}
 		message, err = d.apply(ctx, a)
 		if err != nil {
-			var r *refused
-			if errors.As(err, &r) {
+			if r, ok := errors.AsType[*refused](err); ok {
 				return refuse(http.StatusUnprocessableEntity, r.msg), nil
 			}
 			if res := plugin.Answer(err); res != nil {

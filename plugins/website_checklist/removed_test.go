@@ -43,6 +43,9 @@ func TestUserRemovedHandsScansOverAndKeepsHistory(t *testing.T) {
 		}
 		i++
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	// The history shows them by name.
 	got := (&auditRow{ActorName: "Sarah Lee"}).who()
 	if got != "Sarah Lee" {

@@ -20,7 +20,7 @@
   let setup = $state(null), code = $state(""), error = $state(""), busy = $state(false), codes = $state(null);
 
   get("/settings/two_factor/new").then((s) => {
-    if (s.on) { toast("Two-factor sign-in is already on."); go("/settings/account", undefined, { replace: true }); return; }
+    if (s.on) { toast("Two-factor sign-in is already on."); go("/settings/account?tab=security", undefined, { replace: true }); return; }
     setup = s;
   }).catch(toastError);
 
@@ -86,4 +86,4 @@
   {/if}
 </SettingsLayout>
 
-<RecoveryCodes bind:codes onclose={() => go("/settings/account")} />
+<RecoveryCodes bind:codes onclose={() => go("/settings/account?tab=security")} />

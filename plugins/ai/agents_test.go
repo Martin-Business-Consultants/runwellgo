@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -52,7 +53,7 @@ func newAgent(t *testing.T, h *plugin.Host, fields map[string]any) int64 {
 func runStatus(t *testing.T, h *plugin.Host, id int64) map[string]any {
 	t.Helper()
 	var out map[string]any
-	raw := serve(t, h, "GET", "showRun", map[string]string{"id": fmt.Sprint(id)}, "", nil)
+	raw := serve(t, h, "GET", "showRun", map[string]string{"id": strconv.FormatInt(id, 10)}, "", nil)
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		t.Fatalf("%v: %s", err, raw)
 	}
@@ -79,7 +80,7 @@ func TestAgentRunMentionApproveReply(t *testing.T) {
 	if raw := serve(t, h, "POST", "createAgent", nil, `{"agent":{"name":"Ted bot","handle":"ted","tools":"read"}}`, nil); !strings.Contains(raw, "too like Ted") {
 		t.Fatalf("handle clash: %s", raw)
 	}
-	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 41, Mentionable: fmt.Sprint(id), Source: "note", Record: "Client:7", Subject: "Client 7",
+	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 41, Mentionable: strconv.FormatInt(id, 10), Source: "note", Record: "Client:7", Subject: "Client 7",
 		Author: plugin.Person{ID: 1, Name: "Ted"}, Text: "@Researcher check this client", Path: "/clients/7"}, ted, "ted")
 	var runID int64
 	raw := serve(t, h, "GET", "listRuns", nil, "", nil)
@@ -115,7 +116,7 @@ func TestAgentRunMentionApproveReply(t *testing.T) {
 	if raw := serve(t, h, "GET", "approvalsBadge", nil, "", nil); !strings.Contains(raw, `"count":1`) {
 		t.Fatalf("badge: %s", raw)
 	}
-	raw = serve(t, h, "POST", "decideApproval", map[string]string{"id": fmt.Sprint(inbox.Approvals[0].ID)}, `{"decision":"approve"}`, nil)
+	raw = serve(t, h, "POST", "decideApproval", map[string]string{"id": strconv.FormatInt(inbox.Approvals[0].ID, 10)}, `{"decision":"approve"}`, nil)
 	if !strings.Contains(raw, `"status":"approved"`) || !strings.Contains(raw, `"outcome":"done"`) {
 		t.Fatalf("decision: %s", raw)
 	}
@@ -148,12 +149,12 @@ func TestAgentPausedAndReadOnly(t *testing.T) {
 	h, e := setup(t, "anthropic", p, nil)
 	paused := newAgent(t, h, map[string]any{"name": "Sleepy", "handle": "sleepy", "tools": "read", "paused": true})
 	before := len(replies.order)
-	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 50, Mentionable: fmt.Sprint(paused), Source: "note", Record: "Client:7", Author: plugin.Person{ID: 1, Name: "Ted"}, Text: "hi"}, ted, "ted")
+	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 50, Mentionable: strconv.FormatInt(paused, 10), Source: "note", Record: "Client:7", Author: plugin.Person{ID: 1, Name: "Ted"}, Text: "hi"}, ted, "ted")
 	if len(replies.order) != before+1 || !strings.Contains(replies.byID[replies.order[before]], "paused") || len(p.bodies) != 0 {
 		t.Fatalf("paused: %v, %d calls", replies.byID, len(p.bodies))
 	}
 	reader := newAgent(t, h, map[string]any{"name": "Reader", "handle": "reader", "tools": "read", "max_steps": 4})
-	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 51, Mentionable: fmt.Sprint(reader), Source: "note", Record: "Client:7", Author: plugin.Person{ID: 1, Name: "Ted"}, Text: "add a note"}, ted, "ted")
+	h.DeliverMention(t.Context(), Key, plugin.MentionEvent{ID: 51, Mentionable: strconv.FormatInt(reader, 10), Source: "note", Record: "Client:7", Author: plugin.Person{ID: 1, Name: "Ted"}, Text: "add a note"}, ted, "ted")
 	for _, r := range e.ran {
 		if strings.HasPrefix(r, "add_note") {
 			t.Fatalf("a read-only agent changed something: %v", e.ran)
@@ -188,7 +189,7 @@ func TestExternalApprovals(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &inbox); err != nil || len(inbox.Approvals) != 1 || inbox.Approvals[0].Source != "runners" || inbox.Approvals[0].Link != "https://example.com/pr/9" {
 		t.Fatalf("inbox: %s", raw)
 	}
-	raw = serve(t, h, "POST", "decideApproval", map[string]string{"id": fmt.Sprint(inbox.Approvals[0].ID)}, `{"decision":"approve","note":"ship it"}`, nil)
+	raw = serve(t, h, "POST", "decideApproval", map[string]string{"id": strconv.FormatInt(inbox.Approvals[0].ID, 10)}, `{"decision":"approve","note":"ship it"}`, nil)
 	if !strings.Contains(raw, `"outcome":"done"`) || !strings.Contains(strings.Join(e.ran, ","), "add_note via AI") {
 		t.Fatalf("approve: %s %v", raw, e.ran)
 	}

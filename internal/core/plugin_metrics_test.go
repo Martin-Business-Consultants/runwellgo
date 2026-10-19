@@ -30,7 +30,9 @@ func TestPluginMetrics(t *testing.T) {
 	c := exec(`INSERT INTO clients (name, status, created_at, updated_at) VALUES ('Acme', 'active', datetime('now'), datetime('now'))`)
 	e := exec(`INSERT INTO engagements (client_id, ref, title, created_at, updated_at) VALUES (?, 'WO-1', 'Site', datetime('now'), datetime('now'))`, c)
 	exec(`INSERT INTO todos (engagement_id, title, status, due_on, position, board_position, created_at, updated_at) VALUES (?, 'Late', 'planned', '2000-01-01', 1, 1, datetime('now'), datetime('now'))`, e)
+	//nolint:dupword // three timestamps, all now
 	exec(`INSERT INTO todos (engagement_id, title, status, position, board_position, completed_at, created_at, updated_at) VALUES (?, 'Done', 'done', 2, 2, datetime('now'), datetime('now'), datetime('now'))`, e)
+	//nolint:dupword // three timestamps, all now
 	exec(`INSERT INTO requests (client_id, subject, source, status, received_at, created_at, updated_at) VALUES (?, 'Help', 'email', 'open', datetime('now'), datetime('now'), datetime('now'))`, c)
 	exec(`INSERT INTO notes (subject_type, subject_id, body, occurred_at, source, created_at, updated_at) VALUES ('Engagement', ?, 'hi', datetime('now'), 'app', datetime('now'), datetime('now'))`, e)
 

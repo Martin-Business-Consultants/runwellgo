@@ -398,7 +398,8 @@ func (t *Tx) removePerson(r *removal, succ *User) error {
 		}
 	}
 	for _, id := range ids {
-		if err := t.detach("User", id.(int64), "avatar"); err != nil {
+		uid, _ := id.(int64) // r.ids() is user ids
+		if err := t.detach("User", uid, "avatar"); err != nil {
 			return err
 		}
 	}
@@ -447,5 +448,6 @@ func removedNames(ctx context.Context, db store.Querier, ids []int64) map[int64]
 			out[id] = name
 		}
 	}
+	_ = rows.Err() // best-effort: the names read so far
 	return out
 }

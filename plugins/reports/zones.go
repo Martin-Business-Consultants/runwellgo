@@ -20,7 +20,7 @@ var zonePlaces = map[string]zonePlace{
 	"Adelaide":                     {"Adelaide", "AU", -34.93, 138.60, "Australia/Adelaide"},
 	"Alaska":                       {"Juneau", "US", 58.30, -134.42, "America/Juneau"},
 	"Almaty":                       {"Almaty", "KZ", 43.24, 76.89, "Asia/Almaty"},
-	"American Samoa":               {"Pago Pago", "AS", -14.28, -170.70, "Pacific/Pago_Pago"},
+	"American Samoa":               {"Pago Pago", "AS", -14.28, -170.70, "Pacific/Pago_Pago"}, //nolint:dupword // the city's name
 	"Amsterdam":                    {"Amsterdam", "NL", 52.37, 4.90, "Europe/Amsterdam"},
 	"Arizona":                      {"Phoenix", "US", 33.45, -112.07, "America/Phoenix"},
 	"Astana":                       {"Astana", "KZ", 51.17, 71.45, "Asia/Almaty"},

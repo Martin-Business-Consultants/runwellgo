@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -59,12 +60,12 @@ func conversationSoFar(ctx context.Context, api *plugin.API, d *directory, c *co
 		return ""
 	}
 	lines := []string{}
-	for i := len(list) - 1; i >= 0; i-- {
-		who := d.name(list[i].UserID)
-		if a := agentOf(list[i]); a != nil {
+	for _, l := range slices.Backward(list) {
+		who := d.name(l.UserID)
+		if a := agentOf(l); a != nil {
 			who = str(a["name"])
 		}
-		lines = append(lines, who+": "+list[i].Text)
+		lines = append(lines, who+": "+l.Text)
 	}
 	return strings.Join(lines, "\n")
 }

@@ -35,7 +35,7 @@ const noteClient = `SELECT n.id AS id, n.occurred_at AS at,
 	FROM notes n`
 
 // Metrics answers the install's numbers (plugin.MetricsEnv).
-func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.Metrics, error) {
+func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.Metrics, error) { //nolint:gocyclo // one query after another, each simple
 	a := e.a
 	s, err := a.settings(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		if !t.Valid {
 			return nil
 		}
-		v := t.Time.UTC()
+		v := t.UTC()
 		return &v
 	}
 	want := func(clientID int64) bool { return q.ClientID == 0 || clientID == q.ClientID }
@@ -71,7 +71,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		var c plugin.ClientMetrics
 		var created store.Time
 		err := r.Scan(&c.ID, &c.Name, &c.Status, &c.TimeZone, &c.Internal, &created)
-		c.CreatedAt = created.Time.UTC()
+		c.CreatedAt = created.UTC()
 		return c, err
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		return rows.Err()
 	}
 	touch := func(c *plugin.ClientMetrics, t store.Time, kind string) {
-		if t.Valid && (c.LastTouchAt == nil || t.Time.After(*c.LastTouchAt)) {
+		if t.Valid && (c.LastTouchAt == nil || t.After(*c.LastTouchAt)) {
 			c.LastTouchAt, c.LastTouchKind = ptr(t), kind
 		}
 	}
@@ -211,7 +211,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		w := work[eng.ID]
 		em := plugin.EngagementMetrics{ID: eng.ID, ClientID: eng.ClientID, Ref: eng.Ref, Title: eng.Title, Label: eng.Label, Shape: eng.Shape,
 			State: eng.State(), CloseOutcome: eng.CloseOutcome, AgreedCents: cents(eng.AgreedAmountCents()),
-			WorkOpen: w.open, WorkDone: w.done, WorkLate: w.late, CreatedAt: eng.CreatedAt.Time.UTC(), ClosedAt: ptr(eng.ClosedAt)}
+			WorkOpen: w.open, WorkDone: w.done, WorkLate: w.late, CreatedAt: eng.CreatedAt.UTC(), ClosedAt: ptr(eng.ClosedAt)}
 		if cur := eng.CurrentVersion(); cur != nil {
 			em.Cadence = cur.Cadence
 		}
@@ -232,7 +232,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		if c := byID[eng.ClientID]; c != nil && !eng.Closed() {
 			if st := em.State; st == "sent" || st == "changes_requested" {
 				c.WaitingApprovals++
-				if latest := eng.Versions[len(eng.Versions)-1]; latest.SentAt.Valid && (c.WaitingSince == nil || latest.SentAt.Time.Before(*c.WaitingSince)) {
+				if latest := eng.Versions[len(eng.Versions)-1]; latest.SentAt.Valid && (c.WaitingSince == nil || latest.SentAt.Before(*c.WaitingSince)) {
 					c.WaitingSince = ptr(latest.SentAt)
 				}
 			}
@@ -241,18 +241,18 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 
 		// Its agreements' facts, and the client's latest decision.
 		if !eng.CreatedAt.Before(q.Since) {
-			m.Facts = append(m.Facts, plugin.Fact{Kind: "engagement.created", At: eng.CreatedAt.Time.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: eng.ID})
+			m.Facts = append(m.Facts, plugin.Fact{Kind: "engagement.created", At: eng.CreatedAt.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: eng.ID})
 		}
 		for _, v := range eng.Versions {
 			if v.SentAt.Valid && !v.SentAt.Before(q.Since) {
-				m.Facts = append(m.Facts, plugin.Fact{Kind: "agreement.sent", At: v.SentAt.Time.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: v.ID, Cents: cents(versionCents(eng, v))})
+				m.Facts = append(m.Facts, plugin.Fact{Kind: "agreement.sent", At: v.SentAt.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: v.ID, Cents: cents(versionCents(eng, v))})
 			}
 			if ap := v.Approval; ap != nil && ap.DecidedAt.Valid {
 				if c := byID[eng.ClientID]; c != nil {
 					touch(c, ap.DecidedAt, "approval")
 				}
 				if !ap.DecidedAt.Before(q.Since) {
-					m.Facts = append(m.Facts, plugin.Fact{Kind: "agreement." + ap.Decision, At: ap.DecidedAt.Time.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: v.ID,
+					m.Facts = append(m.Facts, plugin.Fact{Kind: "agreement." + ap.Decision, At: ap.DecidedAt.UTC(), ClientID: eng.ClientID, EngagementID: eng.ID, ID: v.ID,
 						Cents: cents(versionCents(eng, v)), Start: ptr(v.SentAt)})
 				}
 			}
@@ -284,7 +284,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		var at store.Time
 		var client, eng sql.NullInt64
 		err := r.Scan(&f.ID, &at, &client, &eng)
-		f.At, f.ClientID, f.EngagementID = at.Time.UTC(), client.Int64, eng.Int64
+		f.At, f.ClientID, f.EngagementID = at.UTC(), client.Int64, eng.Int64
 		return f, err
 	}
 	if err := fact("client.created", `SELECT id, created_at, id, NULL FROM clients WHERE created_at >= ?`, plain); err != nil {
@@ -297,7 +297,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		var f plugin.Fact
 		var at store.Time
 		err := r.Scan(&f.ID, &at, &f.ClientID, &f.EngagementID, &f.Due)
-		f.At = at.Time.UTC()
+		f.At = at.UTC()
 		return f, err
 	}); err != nil {
 		return nil, err
@@ -310,7 +310,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		var at, received store.Time
 		var client sql.NullInt64
 		err := r.Scan(&f.ID, &at, &client, &received)
-		f.At, f.ClientID, f.Start = at.Time.UTC(), client.Int64, ptr(received)
+		f.At, f.ClientID, f.Start = at.UTC(), client.Int64, ptr(received)
 		return f, err
 	}); err != nil {
 		return nil, err
@@ -324,7 +324,7 @@ func (e pluginEnv) Metrics(ctx context.Context, q plugin.MetricsQuery) (*plugin.
 		var eng sql.NullInt64
 		var resolution string
 		err := r.Scan(&f.ID, &at, &f.ClientID, &eng, &resolution, &f.Due)
-		f.At, f.EngagementID, f.Kind = at.Time.UTC(), eng.Int64, "commitment."+resolution
+		f.At, f.EngagementID, f.Kind = at.UTC(), eng.Int64, "commitment."+resolution
 		return f, err
 	}); err != nil {
 		return nil, err

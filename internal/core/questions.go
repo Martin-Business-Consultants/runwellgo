@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strings"
@@ -116,24 +117,22 @@ func (a *App) questionsJSON(ctx context.Context, list []*Question) ([]Obj, error
 		if typ == "Engagement" {
 			query = `SELECT id, title, ref FROM engagements WHERE id IN (%s)`
 		}
-		rows, err := a.store.QueryContext(ctx, fmt.Sprintf(query, store.Placeholders(len(ids))), idArgs(ids)...)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
+		err := eachRow(ctx, a.store, fmt.Sprintf(query, store.Placeholders(len(ids))), idArgs(ids), func(rows *sql.Rows) error {
 			var id int64
 			var name, ref string
 			if err := rows.Scan(&id, &name, &ref); err != nil {
-				rows.Close()
-				return nil, err
+				return err
 			}
 			if typ == "Engagement" {
 				subjects[typ][id] = a.agentRef(typ, id, ref, ref+" "+name, "/engagements/"+ref)
 			} else {
 				subjects[typ][id] = a.agentRef(typ, id, "", name, fmt.Sprintf("/clients/%d", id))
 			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		rows.Close()
 	}
 	out := make([]Obj, len(list))
 	for i, q := range list {

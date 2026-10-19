@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -109,7 +111,7 @@ type provider struct {
 func (p *provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if r.Method == "GET" { // the models list, fetched on saving settings
+	if r.Method == http.MethodGet { // the models list, fetched on saving settings
 		io.WriteString(w, `{"data":[{"id":"claude-opus-5-5"}]}`)
 		return
 	}
@@ -168,9 +170,7 @@ func setup(t *testing.T, providerKey string, p *provider, more map[string]any) (
 		t.Fatal(err)
 	}
 	s := map[string]any{"enabled": true, "provider": providerKey, "api_key": "sk-test", "api_base": srv.URL + "/v1"}
-	for k, v := range more {
-		s[k] = v
-	}
+	maps.Copy(s, more)
 	body, _ := json.Marshal(map[string]any{"ai_setting": s})
 	if res := serve(t, h, "PATCH", "updateSettings", nil, string(body), nil); !strings.Contains(res, "AI is on") {
 		t.Fatalf("settings: %s", res)
@@ -201,7 +201,7 @@ func chatID(t *testing.T, h *plugin.Host, record string) string {
 	if err := json.Unmarshal([]byte(serve(t, h, "GET", "currentChat", nil, "", map[string][]string{"record": {record}})), &c); err != nil {
 		t.Fatal(err)
 	}
-	return fmt.Sprint(c.Chat.ID)
+	return strconv.FormatInt(c.Chat.ID, 10)
 }
 
 type panel struct {

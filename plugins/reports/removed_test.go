@@ -29,4 +29,7 @@ func TestUserRemovedKeepsWhoSetAPlace(t *testing.T) {
 			t.Fatalf("client %d: set by %d %q, want %v", client, by, name, w)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 }

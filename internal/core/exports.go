@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,7 +79,8 @@ func (a *App) listExports(c *Ctx) error {
 	for i, x := range list {
 		var url, size any
 		if x.Get("state") == "ready" {
-			if b, err := a.attachedBlob(ctx, a.store, "Export", x.Get("id").(int64), "archive"); err != nil {
+			id, _ := x.Get("id").(int64) // exports.id
+			if b, err := a.attachedBlob(ctx, a.store, "Export", id, "archive"); err != nil {
 				return err
 			} else if b != nil {
 				url = fmt.Sprintf("%s/api/settings/exports/%d/download", a.BaseURL(), x.Get("id"))
@@ -245,7 +247,7 @@ func (a *App) buildExport(ctx context.Context, id int64) (err error) {
 
 // withDelimiter is 12345 as "12,345".
 func withDelimiter(n int) string {
-	s := fmt.Sprint(n)
+	s := strconv.Itoa(n)
 	var out []string
 	for len(s) > 3 {
 		out = append([]string{s[len(s)-3:]}, out...)

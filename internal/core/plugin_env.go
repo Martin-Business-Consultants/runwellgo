@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,9 +81,7 @@ func (e pluginEnv) SendMail(ctx context.Context, m mail.Message) error { return 
 func (e pluginEnv) Audit(ctx context.Context, actor plugin.Actor, action string, _ int64, label string, meta map[string]any) {
 	who, _ := actor.(*Actor)
 	payload := map[string]any{"plugin": label}
-	for k, v := range meta {
-		payload[k] = v
-	}
+	maps.Copy(payload, meta)
 	err := e.a.write(ctx, who, func(t *Tx) error {
 		s, err := e.a.settings(ctx)
 		if err != nil {
@@ -98,7 +98,7 @@ func (e pluginEnv) Audit(ctx context.Context, actor plugin.Actor, action string,
 
 // Records answers q with plain SQL, each record shaped as the agent tools'
 // partials shape it (clients/_client, todos/_todo, …): agent_ref first.
-func (e pluginEnv) Records(ctx context.Context, q plugin.Query) ([]map[string]any, error) {
+func (e pluginEnv) Records(ctx context.Context, q plugin.Query) ([]map[string]any, error) { //nolint:gocyclo // a query per record type, each simple
 	a := e.a
 	var where []string
 	var args []any
@@ -180,13 +180,14 @@ func (e pluginEnv) Records(ctx context.Context, q plugin.Query) ([]map[string]an
 			// Their custom fields, by key, as clients/_client has them.
 			ids := make([]int64, len(out))
 			for i, o := range out {
-				ids[i] = o["id"].(int64)
+				ids[i], _ = o["id"].(int64) // clientRef's
 			}
 			var custom map[int64]Obj
 			if custom, err = a.customValues(ctx, a.store, "Client", ids); err == nil {
 				for _, o := range out {
 					fields := map[string]any{}
-					for _, f := range custom[o["id"].(int64)] {
+					id, _ := o["id"].(int64)
+					for _, f := range custom[id] {
 						fields[f.K] = f.V
 					}
 					o["custom_fields"] = fields
@@ -468,7 +469,7 @@ func pluginMoney(cents int64) string {
 	if neg {
 		cents = -cents
 	}
-	whole := fmt.Sprint(cents / 100)
+	whole := strconv.FormatInt(cents/100, 10)
 	for i := len(whole) - 3; i > 0; i -= 3 {
 		whole = whole[:i] + "," + whole[i:]
 	}
@@ -723,9 +724,7 @@ func (e pluginEnv) recordEvent(t *Tx, key string, ev plugin.Event) (map[string]a
 		return nil, err
 	}
 	payload := map[string]any{}
-	for k, v := range ev.Payload {
-		payload[k] = v
-	}
+	maps.Copy(payload, ev.Payload)
 	payload["plugin"] = key
 	if err := t.Event(typ, id, ev.Kind, payload); err != nil {
 		return nil, err

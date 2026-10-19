@@ -292,18 +292,11 @@ func (t *Tx) updateUserProfile(p *User, fields map[string]any) error {
 	roleFrom := ""
 	if has(fields, "role") {
 		role := str(fields["role"])
-		if !slices.Contains(Roles, role) {
-			inv.Add("role", "is not included in the list")
-		} else if role != p.Role {
-			if p.Role == "owner" && !p.DeactivatedAt.Valid {
-				n, err := otherActiveOwners(t.Ctx, t, p.ID)
-				if err != nil {
-					return err
-				}
-				if n == 0 {
-					inv.Add("base", needAnOwner)
-				}
-			}
+		change, err := t.roleChange(p, role, inv)
+		if err != nil {
+			return err
+		}
+		if change {
 			set["role"] = role
 			roleFrom = p.Role
 		}
@@ -338,15 +331,37 @@ func (t *Tx) updateUserProfile(p *User, fields map[string]any) error {
 		}
 	}
 	if v, ok := set["name"]; ok {
-		p.Name = v.(string)
+		p.Name, _ = v.(string)
 	}
 	if v, ok := set["email_address"]; ok {
-		p.Email = v.(string)
+		p.Email, _ = v.(string)
 	}
 	if v, ok := set["role"]; ok {
-		p.Role = v.(string)
+		p.Role, _ = v.(string)
 	}
 	return nil
+}
+
+// roleChange is whether role is a change to p's, adding to inv why it
+// can't be: not a role, or the last active owner stepping down.
+func (t *Tx) roleChange(p *User, role string, inv apierr.Invalid) (bool, error) {
+	if !slices.Contains(Roles, role) {
+		inv.Add("role", "is not included in the list")
+		return false, nil
+	}
+	if role == p.Role {
+		return false, nil
+	}
+	if p.Role == "owner" && !p.DeactivatedAt.Valid {
+		n, err := otherActiveOwners(t.Ctx, t, p.ID)
+		if err != nil {
+			return false, err
+		}
+		if n == 0 {
+			inv.Add("base", needAnOwner)
+		}
+	}
+	return true, nil
 }
 
 func (a *App) updatePerson(c *Ctx) error {

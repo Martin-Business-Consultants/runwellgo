@@ -497,51 +497,9 @@ func (a *App) pluginRoute(c *Ctx) error {
 	if rt == nil {
 		return apierr.NotFound("The plugin " + p.Key + " has no route " + c.R.Method + " " + path + ".")
 	}
-	if rt.Public && c.Actor == nil {
-		if ok, wait := a.pluginCalls.Allow(p.Key + " " + c.ip()); !ok {
-			c.W.Header().Set("Retry-After", strconv.Itoa(wait))
-			return &apierr.Error{Status: 429, Code: "rate_limited", Message: "Too many requests; try again in a minute."}
-		}
-	}
-	if rt.Portal {
-		// A client's contact signed in to their portal (or their portal
-		// agent's token), while the plugin may serve the portal.
-		if !p.Granted.Portal {
-			return apierr.NotFound("The plugin " + p.Key + " has no route " + c.R.Method + " " + path + ".")
-		}
-		actor, err := a.authenticate(c, true)
-		if err != nil {
-			return err
-		}
-		if actor == nil || actor.Contact == nil {
-			return unauthorized()
-		}
-		c.Actor = actor
-	}
-	var machine *plugin.Machine
-	if rt.Machine {
-		// A machine holding one of this plugin's own tokens, and nobody
-		// else: not a person's session or token.
-		h := c.R.Header.Get("Authorization")
-		var err error
-		if strings.HasPrefix(h, "Bearer ") {
-			machine, err = a.plugins.MachineFor(c.R.Context(), p.Key, strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
-		}
-		if err != nil {
-			return err
-		}
-		if machine == nil {
-			return &apierr.Error{Status: 401, Code: "unauthorized", Message: "This route takes a machine token (Authorization: Bearer rwm_…) from this plugin; that one isn't valid or was revoked."}
-		}
-		c.Actor = nil
-	}
-	if !rt.Public && !rt.Portal && !rt.Machine {
-		if c.Actor == nil {
-			return unauthorized()
-		}
-		if !a.mayCall(c, rt, c.R.Method) {
-			return forbidden()
-		}
+	machine, err := a.pluginRouteCaller(c, p, rt, path)
+	if err != nil {
+		return err
 	}
 	limit := rt.MaxBody
 	if limit <= 0 {
@@ -557,12 +515,7 @@ func (a *App) pluginRoute(c *Ctx) error {
 	if int64(len(body)) > limit {
 		return &apierr.Error{Status: 413, Code: "too_large", Message: fmt.Sprintf("The request is larger than this route takes (%d MB).", max(limit>>20, 1))}
 	}
-	headers := map[string]string{}
-	for _, k := range []string{"Content-Type", "Accept", "User-Agent", "Referer", "Origin", "X-Requested-With"} {
-		if v := c.R.Header.Get(k); v != "" {
-			headers[k] = v
-		}
-	}
+	headers := pluginHeaders(c.R)
 	query := c.R.URL.Query()
 	query.Del("envelope")
 	req := &plugin.Request{Method: c.R.Method, Path: path, Params: params, Query: query, Headers: headers, Body: body, IP: c.ip(), Machine: machine}
@@ -618,6 +571,70 @@ func (a *App) pluginRoute(c *Ctx) error {
 	c.W.WriteHeader(status)
 	_, err = c.W.Write(res.Body)
 	return err
+}
+
+// pluginHeaders are the request headers a plugin's handler sees.
+func pluginHeaders(r *http.Request) map[string]string {
+	headers := map[string]string{}
+	for _, k := range []string{"Content-Type", "Accept", "User-Agent", "Referer", "Origin", "X-Requested-With"} {
+		if v := r.Header.Get(k); v != "" {
+			headers[k] = v
+		}
+	}
+	return headers
+}
+
+// pluginRouteCaller checks who may call rt: anyone (rate limited), a
+// client's contact on a portal route, the plugin's own machine (which it
+// is), or staff allowed the route.
+func (a *App) pluginRouteCaller(c *Ctx, p *plugin.Plugin, rt *plugin.Route, path string) (*plugin.Machine, error) {
+	if rt.Public && c.Actor == nil {
+		if ok, wait := a.pluginCalls.Allow(p.Key + " " + c.ip()); !ok {
+			c.W.Header().Set("Retry-After", strconv.Itoa(wait))
+			return nil, &apierr.Error{Status: 429, Code: "rate_limited", Message: "Too many requests; try again in a minute."}
+		}
+	}
+	if rt.Portal {
+		// A client's contact signed in to their portal (or their portal
+		// agent's token), while the plugin may serve the portal.
+		if !p.Granted.Portal {
+			return nil, apierr.NotFound("The plugin " + p.Key + " has no route " + c.R.Method + " " + path + ".")
+		}
+		actor, err := a.authenticate(c, true)
+		if err != nil {
+			return nil, err
+		}
+		if actor == nil || actor.Contact == nil {
+			return nil, unauthorized()
+		}
+		c.Actor = actor
+	}
+	var machine *plugin.Machine
+	if rt.Machine {
+		// A machine holding one of this plugin's own tokens, and nobody
+		// else: not a person's session or token.
+		h := c.R.Header.Get("Authorization")
+		var err error
+		if after, ok := strings.CutPrefix(h, "Bearer "); ok {
+			machine, err = a.plugins.MachineFor(c.R.Context(), p.Key, strings.TrimSpace(after))
+		}
+		if err != nil {
+			return nil, err
+		}
+		if machine == nil {
+			return nil, &apierr.Error{Status: 401, Code: "unauthorized", Message: "This route takes a machine token (Authorization: Bearer rwm_…) from this plugin; that one isn't valid or was revoked."}
+		}
+		c.Actor = nil
+	}
+	if !rt.Public && !rt.Portal && !rt.Machine {
+		if c.Actor == nil {
+			return nil, unauthorized()
+		}
+		if !a.mayCall(c, rt, c.R.Method) {
+			return nil, forbidden()
+		}
+	}
+	return machine, nil
 }
 
 // pluginCaller is the staff actor as a plugin sees its caller.

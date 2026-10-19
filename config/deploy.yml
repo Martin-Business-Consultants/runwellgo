@@ -2,8 +2,8 @@
 # in: servers, registry, builder, the domains). Each install is its own app
 # or environment: Hoster renames the service to that app's, and the volume
 # with it (runwell-data becomes brem-data), so every install gets a volume
-# of its own. Set SITE_KEY (and, if you like, APP_URL) per install under
-# Variables. docs/going-live.html walks through it.
+# of its own. Set SITE_KEY (recommended: it stops two installs sharing a
+# volume by mistake) and, if you like, APP_URL per install under Variables. docs/going-live.html walks through it.
 service: runwell
 image: runwell
 

@@ -277,9 +277,9 @@ type portalEngagement struct {
 }
 
 func (e *portalEngagement) pending() *portalVersion {
-	for i := len(e.Versions) - 1; i >= 0; i-- {
-		if e.Versions[i].awaitingDecision() {
-			return e.Versions[i]
+	for _, v := range slices.Backward(e.Versions) {
+		if v.awaitingDecision() {
+			return v
 		}
 	}
 	return nil
@@ -575,8 +575,9 @@ func (a *App) showPortalEngagement(c *Ctx) error {
 		if ct.CanApprove {
 			how = "Show the person the agreement above, then call portal_decide with their decision and their typed name."
 		}
+		agreement, _ := p.Get("agreement").(map[string]any) // versionJSON's
 		o = o.Set("awaiting_your_decision", O("agreement", p.Get("agreement"), "label", p.Get("label"), "sent_at", p.Get("sent_at"),
-			"you_can_decide", ct.CanApprove, "how", how).Set("version", a.portalVersionDetail(s, pending, p.Get("agreement").(map[string]any))))
+			"you_can_decide", ct.CanApprove, "how", how).Set("version", a.portalVersionDetail(s, pending, agreement)))
 	} else {
 		o = o.Set("awaiting_your_decision", nil)
 	}
@@ -588,8 +589,7 @@ func (a *App) showPortalEngagement(c *Ctx) error {
 	o = o.Set("scope_in_force", items)
 
 	agreements := []Obj{}
-	for i := len(e.Versions) - 1; i >= 0; i-- {
-		v := e.Versions[i]
+	for _, v := range slices.Backward(e.Versions) {
 		if !v.sent() {
 			continue
 		}
@@ -600,7 +600,8 @@ func (a *App) showPortalEngagement(c *Ctx) error {
 		if ap := v.Approval; ap != nil {
 			vj = vj.Set("decision", ap.Decision).Set("decided_by", ap.ApproverName).Set("decided_at", ap.DecidedAt)
 		}
-		agreements = append(agreements, vj.Set("version", a.portalVersionDetail(s, v, vj.Get("agreement").(map[string]any))))
+		agreement, _ := vj.Get("agreement").(map[string]any) // versionJSON's
+		agreements = append(agreements, vj.Set("version", a.portalVersionDetail(s, v, agreement)))
 	}
 	o = o.Set("agreements", agreements)
 

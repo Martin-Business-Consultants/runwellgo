@@ -49,7 +49,7 @@ func toolVersion(ctx context.Context, name string, args ...string) (string, erro
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	b, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	b, err := exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec // a fixed tool, asked its version
 	if err != nil {
 		return "", err
 	}
@@ -60,8 +60,8 @@ func toolVersion(ctx context.Context, name string, args ...string) (string, erro
 }
 
 func firstOf(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
 }

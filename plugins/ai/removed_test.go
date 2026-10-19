@@ -46,9 +46,9 @@ func TestUserRemoved(t *testing.T) {
 		`INSERT INTO ai_approvals (id, source, source_id, title, requested_by, approvers, status, ai_chat_id, run_id, created_at, updated_at) VALUES
 			(1, 'ai', 'chat:12:t1', 'Add a note', 2, '{"user_ids":[2]}', 'waiting', 12, 3, '` + now + `', '` + now + `'),
 			(2, 'ai', 'chat:11:t1', 'Add a note', 2, '{"user_ids":[2]}', 'waiting', 11, 2, '` + now + `', '` + now + `'),
-			(3, 'billing', 'inv-1', 'Send the invoice', 1, '{"user_ids":[2,3]}', 'waiting', NULL, NULL, '` + now + `', '` + now + `')`,
+			(3, 'billing', 'inv-1', 'Send the invoice', 1, '{"user_ids":[2,3]}', 'waiting', NULL /* chat */, NULL /* run */, '` + now + `', '` + now + `')`,
 	} {
-		if _, err := db.Exec(q); err != nil {
+		if _, err := db.ExecContext(t.Context(), q); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -60,7 +60,7 @@ func TestUserRemoved(t *testing.T) {
 	one := func(q string) string {
 		t.Helper()
 		var s string
-		if err := db.QueryRow(q).Scan(&s); err != nil {
+		if err := db.QueryRowContext(t.Context(), q).Scan(&s); err != nil {
 			t.Fatalf("%s: %v", q, err)
 		}
 		return s

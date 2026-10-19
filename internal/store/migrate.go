@@ -211,19 +211,6 @@ func hasColumn(ctx context.Context, db Querier, table, name string) (bool, error
 	return n > 0, err
 }
 
-// dropColumn drops table.name if it's there: what a migration removing a
-// column uses.
-func dropColumn(ctx context.Context, db Querier, table, name string) error {
-	if have, err := hasColumn(ctx, db, table, name); err != nil || !have {
-		return err
-	}
-	_, err := db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, quoteIdent(table), quoteIdent(name)))
-	if err != nil {
-		return fmt.Errorf("schema: dropping %s.%s: %w", table, name, err)
-	}
-	return nil
-}
-
 // addColumn adds table.name (def is its type and constraints) unless it's
 // already there: what a migration adding a column uses.
 func addColumn(ctx context.Context, db Querier, table, name, def string) error {

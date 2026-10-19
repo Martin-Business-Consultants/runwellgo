@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,7 +202,7 @@ func briefMoney(cents int64) string {
 	if neg {
 		cents = -cents
 	}
-	whole := fmt.Sprint(cents / 100)
+	whole := strconv.FormatInt(cents/100, 10)
 	var b strings.Builder
 	for i, ch := range whole {
 		if i > 0 && (len(whole)-i)%3 == 0 {
@@ -267,7 +268,8 @@ func (a *App) briefVersions(ctx context.Context, where, order string, limit int)
 		if draft {
 			amount = 0
 			for _, it := range items[v.id] {
-				amount += it.Get("price_cents").(int64)
+				cents, _ := it.Get("price_cents").(int64) // NOT NULL
+				amount += cents
 			}
 		}
 		label := reqVersionLabel(v.kind, v.number)

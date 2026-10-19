@@ -2,10 +2,12 @@
   // Settings › Sign-in: let people sign in with Google, Microsoft, GitHub or
   // single sign-on as well, or only through them. For each, the owner
   // registers an app with the provider (the callback address is here to
-  // copy) and saves its keys.
+  // copy) and saves its keys. A tab per provider (?tab=), each its own form;
+  // an old anchor (#google_oauth2) opens its tab.
   import SettingsLayout from "$lib/layout/SettingsLayout.svelte";
   import * as Card from "$lib/components/ui/card/index.js";
   import * as Field from "$lib/components/ui/field/index.js";
+  import * as Tabs from "$lib/components/ui/tabs/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Input } from "$lib/components/ui/input/index.js";
   import { Switch } from "$lib/components/ui/switch/index.js";
@@ -15,8 +17,10 @@
   import SecretBox from "$lib/components/SecretBox.svelte";
   import { get, patch } from "$lib/api.js";
   import { toast, toastError, errorMessage } from "$lib/toast.svelte.js";
+  import { pageTabs } from "$lib/page-tabs.svelte.js";
 
   let data = $state(null), forms = $state({}), errors = $state({});
+  const tabs = pageTabs(() => data?.providers.map((p) => p.key) || [], { hashes: (h) => h });
 
   function load() {
     return get("/settings/sign_in").then((d) => {
@@ -24,7 +28,7 @@
       forms = Object.fromEntries(d.providers.map((p) => [p.key, { client_id: p.client_id, client_secret: "", tenant_id: p.tenant_id, issuer: p.issuer, label: p.label, enabled: p.enabled }]));
     }).catch(toastError);
   }
-  load();
+  load().then(tabs.scrollToHash);
 
   async function save(p, e) {
     e.preventDefault();
@@ -55,47 +59,56 @@
       </Card.Content>
     </Card.Root>
 
-    {#each data.providers as p (p.key)}
-      <Card.Root id={p.key}>
-        <Card.Header>
-          <Card.Title>{p.name}</Card.Title>
-          <Card.Action>{#if p.usable}<Badge>On</Badge>{:else}<Badge variant="outline">Off</Badge>{/if}</Card.Action>
-        </Card.Header>
-        <Card.Content class="flex flex-col gap-4">
-          <ol class="flex list-decimal flex-col gap-2 ps-5 text-sm">
-            {#if p.console}
-              <li>Create an OAuth app in <a href={p.console} target="_blank" rel="noopener" class="underline underline-offset-4">the {p.name} console</a>.</li>
-            {:else}
-              <li>In your identity provider (Okta, Auth0, Keycloak, JumpCloud, Google Workspace or any other that speaks OpenID Connect), add a web application.</li>
-            {/if}
-            <li><div class="flex flex-col gap-2">Give it this callback (redirect) address:<SecretBox value={p.callback_url} /></div></li>
-            <li>Paste its client ID and secret here, and switch it on.</li>
-          </ol>
-          <form onsubmit={(e) => save(p, e)}>
-            <Field.Group>
-              {#if p.key === "openid_connect"}
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <Field.Field><Field.Label for={`${p.key}-label`}>Button name</Field.Label><Input id={`${p.key}-label`} bind:value={forms[p.key].label} autocomplete="off" placeholder="Okta" /></Field.Field>
-                  <Field.Field><Field.Label for={`${p.key}-issuer`}>Issuer address</Field.Label><Input id={`${p.key}-issuer`} type="url" bind:value={forms[p.key].issuer} autocomplete="off" spellcheck="false" placeholder="https://acme.okta.com" /></Field.Field>
-                </div>
-              {/if}
-              <div class="grid gap-4 sm:grid-cols-2">
-                <Field.Field><Field.Label for={`${p.key}-id`}>Client ID</Field.Label><Input id={`${p.key}-id`} bind:value={forms[p.key].client_id} autocomplete="off" spellcheck="false" /></Field.Field>
-                <Field.Field><Field.Label for={`${p.key}-secret`}>Client secret</Field.Label><Input id={`${p.key}-secret`} type="password" bind:value={forms[p.key].client_secret} autocomplete="new-password" placeholder={p.secret_saved ? "Saved: leave blank to keep it" : ""} /></Field.Field>
-              </div>
-              {#if p.key === "entra_id"}
-                <Field.Field><Field.Label for={`${p.key}-tenant`}>Tenant ID (optional)</Field.Label><Input id={`${p.key}-tenant`} bind:value={forms[p.key].tenant_id} autocomplete="off" spellcheck="false" placeholder="common: any Microsoft work or personal account" /></Field.Field>
-              {/if}
-              <Field.Field orientation="horizontal">
-                <Checkbox id={`${p.key}-enabled`} bind:checked={forms[p.key].enabled} />
-                <Field.Label for={`${p.key}-enabled`} class="font-normal">Show “Continue with {p.name}” on the sign-in page</Field.Label>
-              </Field.Field>
-              {#if errors[p.key]}<p class="text-destructive text-sm">{errors[p.key]}</p>{/if}
-              <div><Button type="submit">Save</Button></div>
-            </Field.Group>
-          </form>
-        </Card.Content>
-      </Card.Root>
-    {/each}
+    <Tabs.Root value={tabs.value} onValueChange={tabs.set} class="gap-6">
+      <Tabs.List aria-label="Providers">
+        {#each data.providers as p (p.key)}
+          <Tabs.Trigger value={p.key}>{p.name}{#if p.usable}<span class="text-muted-foreground text-xs">On</span>{/if}</Tabs.Trigger>
+        {/each}
+      </Tabs.List>
+      {#each data.providers as p (p.key)}
+        <Tabs.Content value={p.key}>
+          <Card.Root id={p.key}>
+            <Card.Header>
+              <Card.Title>{p.name}</Card.Title>
+              <Card.Action>{#if p.usable}<Badge>On</Badge>{:else}<Badge variant="outline">Off</Badge>{/if}</Card.Action>
+            </Card.Header>
+            <Card.Content class="flex flex-col gap-4">
+              <ol class="flex list-decimal flex-col gap-2 ps-5 text-sm">
+                {#if p.console}
+                  <li>Create an OAuth app in <a href={p.console} target="_blank" rel="noopener" class="underline underline-offset-4">the {p.name} console</a>.</li>
+                {:else}
+                  <li>In your identity provider (Okta, Auth0, Keycloak, JumpCloud, Google Workspace or any other that speaks OpenID Connect), add a web application.</li>
+                {/if}
+                <li><div class="flex flex-col gap-2">Give it this callback (redirect) address:<SecretBox value={p.callback_url} /></div></li>
+                <li>Paste its client ID and secret here, and switch it on.</li>
+              </ol>
+              <form onsubmit={(e) => save(p, e)}>
+                <Field.Group>
+                  {#if p.key === "openid_connect"}
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <Field.Field><Field.Label for={`${p.key}-label`}>Button name</Field.Label><Input id={`${p.key}-label`} bind:value={forms[p.key].label} autocomplete="off" placeholder="Okta" /></Field.Field>
+                      <Field.Field><Field.Label for={`${p.key}-issuer`}>Issuer address</Field.Label><Input id={`${p.key}-issuer`} type="url" bind:value={forms[p.key].issuer} autocomplete="off" spellcheck="false" placeholder="https://acme.okta.com" /></Field.Field>
+                    </div>
+                  {/if}
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <Field.Field><Field.Label for={`${p.key}-id`}>Client ID</Field.Label><Input id={`${p.key}-id`} bind:value={forms[p.key].client_id} autocomplete="off" spellcheck="false" /></Field.Field>
+                    <Field.Field><Field.Label for={`${p.key}-secret`}>Client secret</Field.Label><Input id={`${p.key}-secret`} type="password" bind:value={forms[p.key].client_secret} autocomplete="new-password" placeholder={p.secret_saved ? "Saved: leave blank to keep it" : ""} /></Field.Field>
+                  </div>
+                  {#if p.key === "entra_id"}
+                    <Field.Field><Field.Label for={`${p.key}-tenant`}>Tenant ID (optional)</Field.Label><Input id={`${p.key}-tenant`} bind:value={forms[p.key].tenant_id} autocomplete="off" spellcheck="false" placeholder="common: any Microsoft work or personal account" /></Field.Field>
+                  {/if}
+                  <Field.Field orientation="horizontal">
+                    <Checkbox id={`${p.key}-enabled`} bind:checked={forms[p.key].enabled} />
+                    <Field.Label for={`${p.key}-enabled`} class="font-normal">Show “Continue with {p.name}” on the sign-in page</Field.Label>
+                  </Field.Field>
+                  {#if errors[p.key]}<p class="text-destructive text-sm">{errors[p.key]}</p>{/if}
+                  <div><Button type="submit">Save</Button></div>
+                </Field.Group>
+              </form>
+            </Card.Content>
+          </Card.Root>
+        </Tabs.Content>
+      {/each}
+    </Tabs.Root>
   {/if}
 </SettingsLayout>

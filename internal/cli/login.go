@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -64,12 +65,16 @@ func strOr(s, fallback string) string {
 // (once per sign-in), opens the install's consent page, and waits for the
 // answer on a loopback address.
 func browserLogin(ctx context.Context, env Env, c *client, noBrowser, readOnly bool) (Profile, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return Profile{}, err
 	}
 	defer ln.Close()
-	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", ln.Addr().(*net.TCPAddr).Port)
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return Profile{}, fmt.Errorf("listening on %s, not a TCP address", ln.Addr())
+	}
+	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", addr.Port)
 
 	host, _ := os.Hostname()
 	status, body, err := c.once(ctx, "POST", "/oauth/clients", map[string]any{"client_name": "runwell CLI on " + strOr(host, "this computer"), "redirect_uris": []string{redirect}})
@@ -119,7 +124,7 @@ func browserLogin(ctx context.Context, env Env, c *client, noBrowser, readOnly b
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if a.err != nil {
-			fmt.Fprintf(w, "<!doctype html><title>runwell</title><p style=\"font-family:sans-serif\">%s. You can close this tab.</p>", strings.ReplaceAll(a.err.Error(), "<", "&lt;"))
+			fmt.Fprintf(w, "<!doctype html><title>runwell</title><p style=\"font-family:sans-serif\">%s. You can close this tab.</p>", html.EscapeString(a.err.Error()))
 		} else {
 			fmt.Fprint(w, "<!doctype html><title>runwell</title><p style=\"font-family:sans-serif\">Signed in. You can close this tab and go back to the terminal.</p>")
 		}

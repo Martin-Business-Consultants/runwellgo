@@ -109,8 +109,7 @@ func (a *App) ingress(name string, read func(w http.ResponseWriter, r *http.Requ
 		r.Body = http.MaxBytesReader(w, r.Body, maxInbound)
 		raws, err := read(w, r, password)
 		if err != nil {
-			var ie *ingressError
-			if errors.As(err, &ie) {
+			if ie, ok := errors.AsType[*ingressError](err); ok {
 				if ie.status == http.StatusUnauthorized {
 					w.Header().Set("WWW-Authenticate", `Basic realm="Action Mailbox"`)
 				}
@@ -159,7 +158,7 @@ func mailboxOriginalTo(raw []byte, to string) []byte {
 // mailboxForm reads a form post (urlencoded or multipart).
 func mailboxForm(r *http.Request) error {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-		return r.ParseMultipartForm(32 << 20)
+		return r.ParseMultipartForm(32 << 20) //nolint:gosec // ingress caps the body at maxInbound
 	}
 	return r.ParseForm()
 }

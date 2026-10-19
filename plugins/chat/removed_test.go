@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -93,7 +93,6 @@ func setup(t *testing.T) (*plugin.Host, *env, *sql.DB) {
 }
 
 var (
-	ted    = &plugin.Caller{ID: 1, Name: "Ted", Role: "owner"}
 	sarah  = &plugin.Caller{ID: 2, Name: "Sarah", Role: "manager"}
 	marcus = &plugin.Caller{ID: 3, Name: "Marcus", Role: "member"}
 )
@@ -122,7 +121,7 @@ func convID(t *testing.T, out map[string]any) string {
 	if id == 0 {
 		t.Fatalf("no conversation: %v", out)
 	}
-	return fmt.Sprint(int64(id))
+	return strconv.FormatInt(int64(id), 10)
 }
 
 // Someone removed: their messages stay under "Name (removed)", their
@@ -147,10 +146,10 @@ func TestUserRemoved(t *testing.T) {
 	}
 
 	var creator, members, profiles, sarahIn int
-	_ = db.QueryRow(`SELECT created_by_id FROM chat_conversations WHERE id = ?`, ch).Scan(&creator)
-	_ = db.QueryRow(`SELECT count(*) FROM chat_members WHERE conversation_id = ? AND user_id = 3`, ch).Scan(&members)
-	_ = db.QueryRow(`SELECT count(*) FROM chat_members WHERE user_id = 2 AND conversation_id = ?`, ch).Scan(&sarahIn)
-	_ = db.QueryRow(`SELECT count(*) FROM chat_profiles WHERE user_id = 2`).Scan(&profiles)
+	_ = db.QueryRowContext(t.Context(), `SELECT created_by_id FROM chat_conversations WHERE id = ?`, ch).Scan(&creator)
+	_ = db.QueryRowContext(t.Context(), `SELECT count(*) FROM chat_members WHERE conversation_id = ? AND user_id = 3`, ch).Scan(&members)
+	_ = db.QueryRowContext(t.Context(), `SELECT count(*) FROM chat_members WHERE user_id = 2 AND conversation_id = ?`, ch).Scan(&sarahIn)
+	_ = db.QueryRowContext(t.Context(), `SELECT count(*) FROM chat_profiles WHERE user_id = 2`).Scan(&profiles)
 	if creator != 3 || members != 1 || sarahIn != 0 || profiles != 0 {
 		t.Fatalf("creator %d, marcus in %d, sarah in %d, profiles %d", creator, members, sarahIn, profiles)
 	}

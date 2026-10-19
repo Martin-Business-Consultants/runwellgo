@@ -116,7 +116,7 @@ func (h *Host) MachineFor(ctx context.Context, key, plain string) (*Machine, err
 	}
 	// When it was last used, to the minute: a machine polling every few
 	// seconds doesn't write each time.
-	if now := time.Now(); used.Time.Before(now.Add(-time.Minute)) {
+	if now := time.Now(); used.Before(now.Add(-time.Minute)) {
 		_, _ = h.db.ExecContext(ctx, `UPDATE plugin_machine_tokens SET last_used_at = ? WHERE id = ?`, store.Now().DB(), m.TokenID)
 	}
 	return m, nil

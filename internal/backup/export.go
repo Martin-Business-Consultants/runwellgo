@@ -29,8 +29,8 @@ import (
 // (ReindexFile). Good for trying a live install out on a laptop; a backup
 // moves one for real.
 
-// ReindexFile, in the data directory, asks the next start to rebuild the
-// search index (an imported data export has none).
+// ReindexFile is the file in the data directory that asks the next start
+// to rebuild the search index (an imported data export has none).
 const ReindexFile = "reindex-pending"
 
 // exportFile is a stored file in a data export: files/<blob id>-<name>.
@@ -82,7 +82,7 @@ func stageExport(ctx context.Context, dataDir string, zr *zip.Reader, opts Optio
 			}
 			var rows []map[string]any
 			if err := readRows(f, &rows); err != nil {
-				return fmt.Errorf("%w: %s: %v", ErrInvalid, f.Name, err)
+				return fmt.Errorf("%w: %s: %w", ErrInvalid, f.Name, err)
 			}
 			if err := insertRows(ctx, tx, table, rows, digest); err != nil {
 				return fmt.Errorf("%s: %w", table, err)
@@ -218,7 +218,7 @@ func insertRows(ctx context.Context, tx *sql.Tx, table string, rows []map[string
 		if len(names) == 0 {
 			continue
 		}
-		q := `INSERT INTO "` + table + `" (` + strings.Join(names, ", ") + `) VALUES (` + store.Placeholders(len(names)) + `)`
+		q := `INSERT INTO "` + table + `" (` + strings.Join(names, ", ") + `) VALUES (` + store.Placeholders(len(names)) + `)` //nolint:gosec // table is one of store.Tables, its columns from its PRAGMA
 		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 			return fmt.Errorf("row %v: %w", row["id"], err)
 		}

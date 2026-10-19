@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -247,7 +248,7 @@ func ids(v any) []int64 {
 			}
 		}
 	case string:
-		for _, s := range strings.Split(l, ",") {
+		for s := range strings.SplitSeq(l, ",") {
 			if id := intOf(s); id > 0 {
 				out = append(out, id)
 			}
@@ -295,10 +296,5 @@ func anys(list []int64) []any {
 }
 
 func contains(list []int64, v int64) bool {
-	for _, x := range list {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, v)
 }

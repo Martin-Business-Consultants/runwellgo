@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -487,28 +488,7 @@ func (s *mcpSession) answer(t *toolSpec, args map[string]any) map[string]any {
 		body["status"] = map[bool]string{true: "ok", false: "error"}[status < 400]
 	}
 	if body["status"] == "error" {
-		data, _ := body["data"].(map[string]any)
-		apiCode := str(body["code"])
-		if apiCode == "" && data != nil {
-			apiCode = str(data["error"])
-			if data["code"] != nil {
-				apiCode = str(data["code"])
-			}
-		}
-		if data != nil {
-			if errs, ok := data["errors"]; ok {
-				body["errors"] = errs
-			}
-			if h, ok := data["hint"]; ok {
-				body["hint"] = h
-			}
-		}
-		if status == 429 {
-			if retry, ok := data["retry_after"]; ok {
-				body["retry_after"] = retry
-			}
-		}
-		return withHint(body, errorCode(apiCode, status), t.Name)
+		return toolError(body, status, t.Name)
 	}
 	if len(t.Next) > 0 {
 		body["next_tools"] = t.Next
@@ -517,14 +497,39 @@ func (s *mcpSession) answer(t *toolSpec, args map[string]any) map[string]any {
 	return body
 }
 
+// toolError is a tool's error answer: the route's code, field errors,
+// hint and retry_after lifted from its data, and a hint by code.
+func toolError(body map[string]any, status int, tool string) map[string]any {
+	data, _ := body["data"].(map[string]any)
+	apiCode := str(body["code"])
+	if apiCode == "" && data != nil {
+		apiCode = str(data["error"])
+		if data["code"] != nil {
+			apiCode = str(data["code"])
+		}
+	}
+	if data != nil {
+		if errs, ok := data["errors"]; ok {
+			body["errors"] = errs
+		}
+		if h, ok := data["hint"]; ok {
+			body["hint"] = h
+		}
+	}
+	if status == 429 {
+		if retry, ok := data["retry_after"]; ok {
+			body["retry_after"] = retry
+		}
+	}
+	return withHint(body, errorCode(apiCode, status), tool)
+}
+
 // suggestions are what to run next, as runwell commands with what's known
 // filled in (the ids this call used, or the record it returned) and
 // placeholders for the rest.
 func (s *mcpSession) suggestions(t *toolSpec, args map[string]any, body map[string]any) []any {
 	known := map[string]any{}
-	for k, v := range args {
-		known[k] = v
-	}
+	maps.Copy(known, args)
 	if rec := returnedRecord(body); rec != nil {
 		known["id"], known["record"] = rec["id"], rec["record"]
 		if rec["type"] == "Todo" {
@@ -629,38 +634,7 @@ func (s *mcpSession) withNamesResolved(t *toolSpec, args map[string]any) (map[st
 			}
 			return out, nil
 		case string:
-			if strings.TrimSpace(x) == "" {
-				return x, nil
-			}
-			typ := idParams[key]
-			switch {
-			case path && (key == "ref" || key == "engagement_ref"):
-				if engagementRef.MatchString(x) {
-					return x, nil
-				}
-				r, err := s.a.resolveName(s.r.Context(), "Engagement", x, clientScope)
-				return r.Ref, err
-			case path && key == "id" && pathType != "" && (clientScope == 0 || slices.Contains([]string{"Engagement", "Todo", "Request"}, pathType)):
-				return s.a.idFor(s.r.Context(), pathType, x, clientScope)
-			case typ == "User" && (strings.EqualFold(x, "me") || strings.EqualFold(x, "none")):
-				if strings.EqualFold(x, "none") {
-					return "", nil
-				}
-				if s.actor.User != nil {
-					return s.actor.User.Person().ID, nil
-				}
-				return x, nil
-			case typ != "" && (clientScope == 0 || slices.Contains([]string{"Engagement", "Todo", "Request"}, typ)):
-				return s.a.idFor(s.r.Context(), typ, x, clientScope)
-			case key == "record":
-				if rt, name, ok := strings.Cut(x, ":"); ok && slices.Contains(resolverTypes, rt) && !isID(name) {
-					r, err := s.a.resolveName(s.r.Context(), rt, name, clientScope)
-					if err != nil {
-						return nil, err
-					}
-					return fmt.Sprintf("%s:%d", rt, r.ID), nil
-				}
-			}
+			return s.resolveString(key, x, path, pathType, clientScope)
 		}
 		return v, nil
 	}
@@ -668,23 +642,67 @@ func (s *mcpSession) withNamesResolved(t *toolSpec, args map[string]any) (map[st
 	for k, v := range args {
 		r, err := resolve(k, v, isPath(k))
 		if err != nil {
-			var amb *errAmbiguous
-			var missing *errMissing
-			switch {
-			case errors.As(err, &amb):
-				cands := []any{}
-				for _, c := range amb.candidates {
-					cands = append(cands, s.a.describeResolved(s.r.Context(), c))
-				}
-				return nil, map[string]any{"status": "error", "code": "ambiguous", "summary": amb.Error(), "candidates": cands, "hint": agentHint("ambiguous", t.Name, 60)}
-			case errors.As(err, &missing):
-				return nil, withHint(map[string]any{"status": "error", "summary": missing.Error()}, "not_found", t.Name)
-			}
-			return nil, withHint(map[string]any{"status": "error", "summary": "Something went wrong running " + t.Name + "."}, "failed", t.Name)
+			return nil, s.resolveError(t, err)
 		}
 		out[k] = r
 	}
 	return out, nil
+}
+
+// resolveString is a string argument with a name where an id or ref goes
+// resolved to that id or ref (a path's own, a field naming a type's
+// record, "me", or a record "Type:name"); as it is otherwise.
+func (s *mcpSession) resolveString(key, x string, path bool, pathType string, clientScope int64) (any, error) {
+	if strings.TrimSpace(x) == "" {
+		return x, nil
+	}
+	typ := idParams[key]
+	switch {
+	case path && (key == "ref" || key == "engagement_ref"):
+		if engagementRef.MatchString(x) {
+			return x, nil
+		}
+		r, err := s.a.resolveName(s.r.Context(), "Engagement", x, clientScope)
+		return r.Ref, err
+	case path && key == "id" && pathType != "" && (clientScope == 0 || slices.Contains([]string{"Engagement", "Todo", "Request"}, pathType)):
+		return s.a.idFor(s.r.Context(), pathType, x, clientScope)
+	case typ == "User" && (strings.EqualFold(x, "me") || strings.EqualFold(x, "none")):
+		if strings.EqualFold(x, "none") {
+			return "", nil
+		}
+		if s.actor.User != nil {
+			return s.actor.User.Person().ID, nil
+		}
+		return x, nil
+	case typ != "" && (clientScope == 0 || slices.Contains([]string{"Engagement", "Todo", "Request"}, typ)):
+		return s.a.idFor(s.r.Context(), typ, x, clientScope)
+	case key == "record":
+		if rt, name, ok := strings.Cut(x, ":"); ok && slices.Contains(resolverTypes, rt) && !isID(name) {
+			r, err := s.a.resolveName(s.r.Context(), rt, name, clientScope)
+			if err != nil {
+				return nil, err
+			}
+			return fmt.Sprintf("%s:%d", rt, r.ID), nil
+		}
+	}
+	return x, nil
+}
+
+// resolveError is a name that wouldn't resolve, as the tool's answer.
+func (s *mcpSession) resolveError(t *toolSpec, err error) map[string]any {
+	var amb *ambiguousError
+	var missing *missingError
+	switch {
+	case errors.As(err, &amb):
+		cands := []any{}
+		for _, c := range amb.candidates {
+			cands = append(cands, s.a.describeResolved(s.r.Context(), c))
+		}
+		return map[string]any{"status": "error", "code": "ambiguous", "summary": amb.Error(), "candidates": cands, "hint": agentHint("ambiguous", t.Name, 60)}
+	case errors.As(err, &missing):
+		return withHint(map[string]any{"status": "error", "summary": missing.Error()}, "not_found", t.Name)
+	}
+	return withHint(map[string]any{"status": "error", "summary": "Something went wrong running " + t.Name + "."}, "failed", t.Name)
 }
 
 // preview is a call that reaches the client, not made yet: what would
@@ -732,9 +750,7 @@ func (s *mcpSession) preview(t *toolSpec, args map[string]any) map[string]any {
 		}
 	}
 	again := map[string]any{}
-	for k, v := range args {
-		again[k] = v
-	}
+	maps.Copy(again, args)
 	again["confirm"] = true
 	return map[string]any{"status": "needs_confirmation",
 		"summary":         "Not done yet. " + t.Confirm + " Tell the person, and call " + t.Name + " again with confirm: true once they agree.",

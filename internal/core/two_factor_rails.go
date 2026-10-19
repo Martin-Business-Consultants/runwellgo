@@ -37,7 +37,7 @@ var railsKeys = sync.OnceValue(func() [][]byte {
 		return nil
 	}
 	var keys [][]byte
-	for _, p := range strings.Split(primary, ",") {
+	for p := range strings.SplitSeq(primary, ",") {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue

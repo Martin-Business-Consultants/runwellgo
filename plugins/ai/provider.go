@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -259,7 +260,7 @@ func (l *llm) send(ctx context.Context, method, path string, body any) ([]byte, 
 			return nil, &providerError{Message: fmt.Sprintf("The answer from %s broke off: %s.", host, err)}
 		}
 		if res.StatusCode >= 300 {
-			if attempt == 0 && (res.StatusCode == 429 || res.StatusCode >= 500) {
+			if attempt == 0 && (res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500) {
 				d := 2 * time.Second
 				if s, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && s > 0 && s <= 20 {
 					d = time.Duration(s) * time.Second
@@ -279,8 +280,7 @@ func retryable(err error) bool {
 }
 
 func plainNetError(err error) string {
-	var ue *url.Error
-	if errors.As(err, &ue) {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
 		err = ue.Err
 	}
 	return err.Error()
@@ -452,38 +452,9 @@ func anthropicMessages(turns []turn) []any {
 	for _, t := range turns {
 		var blocks []any
 		if t.Role == "assistant" {
-			var r rawTurn
-			if json.Unmarshal(t.Raw, &r) == nil && r.Protocol == "anthropic" && len(r.Content) > 0 {
-				// Exactly as it came, byte for byte: thinking blocks too.
-				var kept []json.RawMessage
-				if json.Unmarshal(r.Content, &kept) == nil {
-					for _, b := range kept {
-						blocks = append(blocks, b)
-					}
-				}
-			}
-			if blocks == nil {
-				if t.Text != "" {
-					blocks = append(blocks, map[string]any{"type": "text", "text": t.Text})
-				}
-				for _, c := range t.Calls {
-					blocks = append(blocks, map[string]any{"type": "tool_use", "id": c.ID, "name": c.Name, "input": inputOf(c.Input)})
-				}
-			}
+			blocks = anthropicAssistant(t)
 		} else {
-			for _, r := range t.Results {
-				res := map[string]any{"type": "tool_result", "tool_use_id": r.ID, "content": r.Content}
-				if r.IsError {
-					res["is_error"] = true
-				}
-				blocks = append(blocks, res)
-			}
-			for _, im := range t.Images {
-				blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": im.MediaType, "data": im.Data}})
-			}
-			if t.Text != "" {
-				blocks = append(blocks, map[string]any{"type": "text", "text": t.Text})
-			}
+			blocks = anthropicUser(t)
 		}
 		if len(blocks) == 0 {
 			continue
@@ -499,6 +470,50 @@ func anthropicMessages(turns []turn) []any {
 		list = append(list, map[string]any{"role": m.role, "content": m.content})
 	}
 	return list
+}
+
+// anthropicAssistant is an assistant turn's content blocks.
+func anthropicAssistant(t turn) []any {
+	var blocks []any
+	var r rawTurn
+	if json.Unmarshal(t.Raw, &r) == nil && r.Protocol == "anthropic" && len(r.Content) > 0 {
+		// Exactly as it came, byte for byte: thinking blocks too.
+		var kept []json.RawMessage
+		if json.Unmarshal(r.Content, &kept) == nil {
+			for _, b := range kept {
+				blocks = append(blocks, b)
+			}
+		}
+	}
+	if blocks == nil {
+		if t.Text != "" {
+			blocks = append(blocks, map[string]any{"type": "text", "text": t.Text})
+		}
+		for _, c := range t.Calls {
+			blocks = append(blocks, map[string]any{"type": "tool_use", "id": c.ID, "name": c.Name, "input": inputOf(c.Input)})
+		}
+	}
+	return blocks
+}
+
+// anthropicUser is a user turn's content blocks: tool results, pictures,
+// then the words.
+func anthropicUser(t turn) []any {
+	var blocks []any
+	for _, r := range t.Results {
+		res := map[string]any{"type": "tool_result", "tool_use_id": r.ID, "content": r.Content}
+		if r.IsError {
+			res["is_error"] = true
+		}
+		blocks = append(blocks, res)
+	}
+	for _, im := range t.Images {
+		blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": im.MediaType, "data": im.Data}})
+	}
+	if t.Text != "" {
+		blocks = append(blocks, map[string]any{"type": "text", "text": t.Text})
+	}
+	return blocks
 }
 
 func inputOf(raw json.RawMessage) any {
@@ -518,34 +533,40 @@ func (l *llm) openaiTurn(ctx context.Context, a ask) (*answer, error) {
 	return parseOpenAI(raw)
 }
 
+// openaiAssistant is an assistant turn as a chat completions message:
+// as it came when it came from there, else its words and calls.
+func openaiAssistant(t turn) map[string]any {
+	m := map[string]any{"role": "assistant"}
+	var r rawTurn
+	if json.Unmarshal(t.Raw, &r) == nil && r.Protocol == "openai" && len(r.Content) > 0 {
+		var kept map[string]any
+		if json.Unmarshal(r.Content, &kept) == nil {
+			m = kept
+			m["role"] = "assistant"
+		}
+		return m
+	}
+	m["content"] = t.Text
+	if len(t.Calls) > 0 {
+		calls := []any{}
+		for _, c := range t.Calls {
+			args := string(c.Input)
+			if args == "" {
+				args = "{}"
+			}
+			calls = append(calls, map[string]any{"id": c.ID, "type": "function", "function": map[string]any{"name": c.Name, "arguments": args}})
+		}
+		m["tool_calls"] = calls
+	}
+	return m
+}
+
 // openaiBody is a chat completions request for a.
 func (l *llm) openaiBody(a ask) map[string]any {
 	msgs := []any{map[string]any{"role": "system", "content": a.System}}
 	for _, t := range a.Turns {
 		if t.Role == "assistant" {
-			m := map[string]any{"role": "assistant"}
-			var r rawTurn
-			if json.Unmarshal(t.Raw, &r) == nil && r.Protocol == "openai" && len(r.Content) > 0 {
-				var kept map[string]any
-				if json.Unmarshal(r.Content, &kept) == nil {
-					m = kept
-					m["role"] = "assistant"
-				}
-			} else {
-				m["content"] = t.Text
-				if len(t.Calls) > 0 {
-					calls := []any{}
-					for _, c := range t.Calls {
-						args := string(c.Input)
-						if args == "" {
-							args = "{}"
-						}
-						calls = append(calls, map[string]any{"id": c.ID, "type": "function", "function": map[string]any{"name": c.Name, "arguments": args}})
-					}
-					m["tool_calls"] = calls
-				}
-			}
-			msgs = append(msgs, m)
+			msgs = append(msgs, openaiAssistant(t))
 			continue
 		}
 		for _, r := range t.Results {
@@ -857,7 +878,7 @@ func (l *llm) open(ctx context.Context, path string, body any) (io.ReadCloser, b
 		host = u.Host
 	}
 	for attempt := 0; ; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, "POST", l.base+path, bytes.NewReader(raw))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.base+path, bytes.NewReader(raw))
 		if err != nil {
 			return nil, false, err
 		}
@@ -875,7 +896,7 @@ func (l *llm) open(ctx context.Context, path string, body any) (io.ReadCloser, b
 		if res.StatusCode >= 300 {
 			out, _ := io.ReadAll(res.Body)
 			res.Body.Close()
-			if attempt == 0 && (res.StatusCode == 429 || res.StatusCode >= 500) {
+			if attempt == 0 && (res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500) {
 				wait(ctx, 2*time.Second)
 				continue
 			}
@@ -962,7 +983,7 @@ func readAnthropicStream(r io.Reader, onDelta func(delta)) ([]byte, error) {
 			} `json:"error"`
 		}
 		if json.Unmarshal(data, &ev) != nil {
-			return nil
+			return nil //nolint:nilerr // an event that can't be read is skipped
 		}
 		switch ev.Type {
 		case "message_start":
@@ -970,9 +991,7 @@ func readAnthropicStream(r io.Reader, onDelta func(delta)) ([]byte, error) {
 				Usage map[string]any `json:"usage"`
 			}
 			_ = json.Unmarshal(ev.Message, &m)
-			for k, v := range m.Usage {
-				u[k] = v
-			}
+			maps.Copy(u, m.Usage)
 		case "content_block_start":
 			b := at(ev.Index)
 			b.start = ev.Block
@@ -1001,9 +1020,7 @@ func readAnthropicStream(r io.Reader, onDelta func(delta)) ([]byte, error) {
 			if ev.Delta.StopReason != "" {
 				stop = ev.Delta.StopReason
 			}
-			for k, v := range ev.Usage {
-				u[k] = v
-			}
+			maps.Copy(u, ev.Usage)
 		case "error":
 			msg := ev.Error.Message
 			if msg == "" {
@@ -1019,9 +1036,7 @@ func readAnthropicStream(r io.Reader, onDelta func(delta)) ([]byte, error) {
 	content := []any{}
 	for _, b := range blocks {
 		out := map[string]any{}
-		for k, v := range b.start {
-			out[k] = v
-		}
+		maps.Copy(out, b.start)
 		switch out["type"] {
 		case "text":
 			out["text"] = b.text.String()
@@ -1080,7 +1095,7 @@ func readOpenAIStream(r io.Reader, onDelta func(delta)) ([]byte, error) {
 			Error any             `json:"error"`
 		}
 		if json.Unmarshal(data, &ch) != nil {
-			return nil
+			return nil //nolint:nilerr // a chunk that can't be read is skipped
 		}
 		if ch.Error != nil {
 			return &providerError{Message: "The provider broke off its answer: " + providerMessage(data) + ". Try again shortly."}

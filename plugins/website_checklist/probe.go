@@ -3,6 +3,7 @@ package websitechecklist
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -87,8 +88,7 @@ func probe(ctx context.Context, api *plugin.API, domain string) (obj, []probeFil
 	out := make([]obj, len(parts))
 	var wg sync.WaitGroup
 	for i, pt := range parts {
-		wg.Add(1)
-		go func() { defer wg.Done(); out[i] = part(func() (obj, error) { return pt.fn(ctx) }) }()
+		wg.Go(func() { out[i] = part(func() (obj, error) { return pt.fn(ctx) }) })
 	}
 	wg.Wait()
 	facts := o("domain", domain)
@@ -241,7 +241,7 @@ func (p *prober) follow(ctx context.Context, u, accept string) *answer {
 
 // unwrap is a fetch's error without Go's request preamble.
 func unwrap(err error) string {
-	if ue, ok := err.(*url.Error); ok {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
 		return ue.Err.Error()
 	}
 	return err.Error()
@@ -324,8 +324,7 @@ func (p *prober) addresses(ctx context.Context) (obj, error) {
 	answers := make([]*answer, len(urls))
 	var wg sync.WaitGroup
 	for i, u := range urls {
-		wg.Add(1)
-		go func() { defer wg.Done(); answers[i] = p.follow(ctx, u, "*/*") }()
+		wg.Go(func() { answers[i] = p.follow(ctx, u, "*/*") })
 	}
 	wg.Wait()
 	out := obj{}
@@ -480,8 +479,8 @@ func (p *prober) sitemap(ctx context.Context) (obj, error) {
 	var candidates []string
 	if r, err := p.robotsTxt(ctx); err == nil {
 		for _, kv := range r {
-			if kv.k == "sitemaps" {
-				candidates = append(candidates, kv.v.([]string)...)
+			if list, ok := kv.v.([]string); ok && kv.k == "sitemaps" {
+				candidates = append(candidates, list...)
 			}
 		}
 	}

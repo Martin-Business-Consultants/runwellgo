@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,7 +193,7 @@ func mentioned(ctx context.Context, api *plugin.API, ev plugin.MentionEvent) err
 		return err
 	}
 	if g.Paused {
-		finish(ctx, api, r, runFailed, "", fmt.Sprintf("I’m paused at the moment, so I can’t help with this. An owner can switch me back on in Settings › AI › Agents."))
+		finish(ctx, api, r, runFailed, "", "I’m paused at the moment, so I can’t help with this. An owner can switch me back on in Settings › AI › Agents.")
 		return nil
 	}
 	if msg := cantStart(ctx, api, g, caller, ev.Record); msg != "" {
@@ -240,12 +241,7 @@ func cantStart(ctx context.Context, api *plugin.API, g *agent, caller *plugin.Ca
 }
 
 func containsID(list []int64, id int64) bool {
-	for _, x := range list {
-		if x == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, id)
 }
 
 // plainReason is why AI can't be used, as an agent says it.
@@ -370,21 +366,9 @@ func execute(ctx context.Context, api *plugin.API, id int64) {
 			forget(id)
 			return
 		}
-		var steps int
-		_ = api.QueryRow(ctx, `SELECT count(*) FROM ai_messages WHERE ai_chat_id = ? AND role = 'assistant' AND COALESCE(finish_reason, '') <> 'error'`, r.ChatID).Scan(&steps)
-		if steps >= g.MaxSteps {
-			finish(ctx, api, r, runFailed, fmt.Sprintf("I stopped after %d steps without finishing. Mention me again with a narrower ask.", g.MaxSteps), "")
+		if why, stop := limitReached(ctx, api, r, g, s); stop {
+			finish(ctx, api, r, runFailed, why, "")
 			return
-		}
-		if reason, err := available(ctx, api, s); err != nil || reason != "" {
-			finish(ctx, api, r, runFailed, plainReason(reason), "")
-			return
-		}
-		if g.RunBudgetCents != nil {
-			if spentOn(ctx, api, r.ChatID)*100 >= float64(*g.RunBudgetCents) {
-				finish(ctx, api, r, runFailed, fmt.Sprintf("one run of mine may spend %s, and this one has.", budgetText(g.RunBudgetCents)), "")
-				return
-			}
 		}
 		turns, pending, err := history(ctx, api, r.ChatID)
 		if err != nil {
@@ -429,26 +413,10 @@ func execute(ctx context.Context, api *plugin.API, id int64) {
 			return
 		}
 		runCalls := ans.Stop == "tool_use"
-		waiting := false
-		for i, call := range ans.Calls {
-			args, _ := json.Marshal(inputOf(call.Input))
-			now := store.Now().DB()
-			res, err := api.Exec(ctx, `INSERT INTO ai_tool_calls (ai_message_id, tool_call_id, name, arguments, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				msgID, call.ID, call.Name, string(args), i, now, now)
-			if err != nil {
-				finish(ctx, api, r, runFailed, "I couldn’t keep what I was doing.", "")
-				return
-			}
-			rowID, _ := res.LastInsertId()
-			result, isError, pending := "This wasn't run.", true, false
-			if runCalls {
-				result, isError, pending = ar.call(ctx, call.Name, call.Input)
-			}
-			if pending {
-				waiting = true
-				continue
-			}
-			_, _ = api.Exec(ctx, `UPDATE ai_tool_calls SET result = ?, is_error = ?, updated_at = ? WHERE id = ?`, result, isError, store.Now().DB(), rowID)
+		waiting, err := agentCalls(ctx, api, ar, msgID, ans.Calls, runCalls)
+		if err != nil {
+			finish(ctx, api, r, runFailed, "I couldn’t keep what I was doing.", "")
+			return
 		}
 		if waiting {
 			waitOnPerson(ctx, api, r, g, ar)
@@ -461,11 +429,53 @@ func execute(ctx context.Context, api *plugin.API, id int64) {
 	}
 }
 
+// limitReached says why the run can't take another step, when it can't:
+// its steps used up, AI unavailable, or its budget spent.
+func limitReached(ctx context.Context, api *plugin.API, r *run, g *agent, s *setting) (why string, stop bool) {
+	var steps int
+	_ = api.QueryRow(ctx, `SELECT count(*) FROM ai_messages WHERE ai_chat_id = ? AND role = 'assistant' AND COALESCE(finish_reason, '') <> 'error'`, r.ChatID).Scan(&steps)
+	if steps >= g.MaxSteps {
+		return fmt.Sprintf("I stopped after %d steps without finishing. Mention me again with a narrower ask.", g.MaxSteps), true
+	}
+	if reason, err := available(ctx, api, s); err != nil || reason != "" {
+		return plainReason(reason), true
+	}
+	if g.RunBudgetCents != nil && spentOn(ctx, api, r.ChatID)*100 >= float64(*g.RunBudgetCents) {
+		return fmt.Sprintf("one run of mine may spend %s, and this one has.", budgetText(g.RunBudgetCents)), true
+	}
+	return "", false
+}
+
+// agentCalls keeps an answer's tool calls, running each when run: waiting
+// when one is a change that waits on the person who asked. A call it
+// couldn't keep is the error; a result it couldn't, the call's unanswered.
+func agentCalls(ctx context.Context, api *plugin.API, ar *agentRunner, msgID int64, calls []toolCall, run bool) (waiting bool, err error) {
+	for i, call := range calls {
+		args, _ := json.Marshal(inputOf(call.Input))
+		now := store.Now().DB()
+		res, err := api.Exec(ctx, `INSERT INTO ai_tool_calls (ai_message_id, tool_call_id, name, arguments, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			msgID, call.ID, call.Name, string(args), i, now, now)
+		if err != nil {
+			return false, err
+		}
+		rowID, _ := res.LastInsertId()
+		result, isError, pending := "This wasn't run.", true, false
+		if run {
+			result, isError, pending = ar.call(ctx, call.Name, call.Input)
+		}
+		if pending {
+			waiting = true
+			continue
+		}
+		_, _ = api.Exec(ctx, `UPDATE ai_tool_calls SET result = ?, is_error = ?, updated_at = ? WHERE id = ?`, result, isError, store.Now().DB(), rowID)
+	}
+	return waiting, nil
+}
+
 // plainError is a failure in the words an agent replies with.
 func plainError(ctx context.Context, err error) string {
 	err = ctxErr(ctx, err)
-	var u *unavailable
-	if errors.As(err, &u) {
+	if u, ok := errors.AsType[*unavailable](err); ok {
 		return plainReason(u.msg)
 	}
 	return truncate(err.Error(), 300)
@@ -786,16 +796,17 @@ func listRuns(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugi
 		cost float64
 	}
 	var list []row
-	for rows.Next() {
+	if err := eachRow(rows, func(rows *sql.Rows) error {
 		r := &run{}
 		var cost float64
 		if err := rows.Scan(&r.ID, &r.AgentID, &r.UserID, &r.ChatID, &r.MentionID, &r.Status, &r.Source, &r.Record, &r.Path, &r.Subject, &r.Prompt, &r.Ack, &r.Error, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &cost); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		list = append(list, row{r, cost})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	rows.Close()
 	agents, err := loadAgents(ctx, api)
 	if err != nil {
 		return nil, err
@@ -804,7 +815,7 @@ func listRuns(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugi
 	agentOpts := []map[string]any{}
 	for _, g := range agents {
 		byID[g.ID] = g
-		agentOpts = append(agentOpts, map[string]any{"value": fmt.Sprint(g.ID), "label": "@" + g.Handle})
+		agentOpts = append(agentOpts, map[string]any{"value": strconv.FormatInt(g.ID, 10), "label": "@" + g.Handle})
 	}
 	people := peopleNames(ctx, api)
 	out := []map[string]any{}
@@ -818,7 +829,7 @@ func listRuns(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugi
 	peopleOpts := []map[string]any{}
 	if everyone {
 		for id, name := range people {
-			peopleOpts = append(peopleOpts, map[string]any{"value": fmt.Sprint(id), "label": name})
+			peopleOpts = append(peopleOpts, map[string]any{"value": strconv.FormatInt(id, 10), "label": name})
 		}
 	}
 	return plugin.JSON(200, map[string]any{"summary": fmt.Sprintf("%d %s.", len(out), map[bool]string{true: "run", false: "runs"}[len(out) == 1]), "runs": out,
@@ -865,7 +876,8 @@ func showRun(ctx context.Context, api *plugin.API, req *plugin.Request) (*plugin
 	out, waiting := transcript(ctx, api, msgs, tools, c.replying())
 	j := runJSON(r, g, peopleNames(ctx, api), spentOn(ctx, api, r.ChatID))
 	mine := req.Actor.ID == r.UserID && !req.Actor.Agent
-	summary := fmt.Sprintf("%s's run: %s.", map[bool]string{true: "@" + str(j["agent"].(map[string]any)["handle"]), false: "An agent"}[g != nil], strings.ToLower(statusLabels[r.Status]))
+	ag, _ := j["agent"].(map[string]any) // runJSON's, always a map
+	summary := fmt.Sprintf("%s's run: %s.", map[bool]string{true: "@" + str(ag["handle"]), false: "An agent"}[g != nil], strings.ToLower(statusLabels[r.Status]))
 	return plugin.JSON(200, map[string]any{"summary": summary, "run": j, "messages": out, "waiting": waiting && r.Status == runWaiting,
 		"can_decide": mine && r.Status == runWaiting, "can_cancel": !r.finished() && (mine || req.Actor.Can("manage_settings"))}), nil
 }
@@ -983,10 +995,9 @@ func sweep(ctx context.Context, api *plugin.API) error {
 		return err
 	}
 	var stale []*run
-	for rows.Next() {
+	if err := eachRow(rows, func(rows *sql.Rows) error {
 		r, err := scanRun(rows)
 		if err != nil {
-			rows.Close()
 			return err
 		}
 		queue.Lock()
@@ -995,8 +1006,10 @@ func sweep(ctx context.Context, api *plugin.API) error {
 		if !mine && time.Since(r.CreatedAt.Time) > time.Minute {
 			stale = append(stale, r)
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	rows.Close()
 	for _, r := range stale {
 		finish(ctx, api, r, runFailed, "Runwell restarted before I finished. Mention me again.", "")
 	}

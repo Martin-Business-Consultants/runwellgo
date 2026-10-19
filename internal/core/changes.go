@@ -1,6 +1,8 @@
 package core
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -78,26 +80,9 @@ func (a *App) listChanges(c *Ctx) error {
 		where += ` AND e.occurred_at >= ?`
 		args = append(args, store.TimeOf(since).DB())
 	}
-	var clientID, engagementID int64
-	var scopeName string
-	if v := c.Query("client_id"); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return notFound("client")
-		}
-		if err := a.store.QueryRowContext(ctx, `SELECT name FROM clients WHERE id = ?`, id).Scan(&scopeName); isNoRows(err) {
-			return notFound("client")
-		} else if err != nil {
-			return err
-		}
-		clientID = id
-	}
-	if ref := c.Query("engagement_ref"); ref != "" {
-		if err := a.store.QueryRowContext(ctx, `SELECT id, ref FROM engagements WHERE ref = ?`, strings.ToUpper(ref)).Scan(&engagementID, &scopeName); isNoRows(err) {
-			return notFound("engagement")
-		} else if err != nil {
-			return err
-		}
+	clientID, engagementID, scopeName, err := a.changesScope(ctx, c)
+	if err != nil {
+		return err
 	}
 	scoped := clientID != 0 || engagementID != 0
 	fetch := limit + 1
@@ -172,15 +157,7 @@ func (a *App) listChanges(c *Ctx) error {
 	}
 	list := make([]Obj, 0, len(events))
 	for _, ch := range events {
-		by := "system"
-		switch {
-		case ch.userName != "":
-			by = ch.userName
-		case ch.userEmail != "":
-			by = ch.userEmail
-		case ch.actor != "":
-			by = ch.actor
-		}
+		by := cmp.Or(ch.userName, ch.userEmail, ch.actor, "system")
 		source := ch.source
 		if source == "agent" {
 			source = "via " + strOr(ch.actor, "an agent")
@@ -194,22 +171,52 @@ func (a *App) listChanges(c *Ctx) error {
 		list = append(list, O("id", ch.id, "what", eventTitle(ch.kind), "kind", ch.kind, "details", nullable(eventDetails(ch.payload.Map())),
 			"at", ch.at, "by", by, "source", source, "subject", ref))
 	}
-	switch {
-	case len(events) == 0 && scoped:
-		c.Summary = "Nothing new for " + scopeName + "."
-	case len(events) == 0:
-		c.Summary = "Nothing new."
-	default:
-		c.Summary = pluralize(len(events), "change")
-		if more {
-			c.Summary += fmt.Sprintf(", and more: call again with after: %d", cursor)
-		}
-		c.Summary += "."
-	}
+	c.Summary = changesSummary(len(events), scoped, scopeName, more, cursor)
 	if more {
 		c.Crumbs = []Crumb{step("Hear the rest", "changes", "after", cursor)}
 	}
 	return c.JSON(200, O("summary", c.Summary, "cursor", cursor, "more", more, "changes", list))
+}
+
+// changesSummary is how many changes there are, for the scope named if
+// any, and how to hear the rest.
+func changesSummary(n int, scoped bool, scopeName string, more bool, cursor int64) string {
+	switch {
+	case n == 0 && scoped:
+		return "Nothing new for " + scopeName + "."
+	case n == 0:
+		return "Nothing new."
+	}
+	summary := pluralize(n, "change")
+	if more {
+		summary += fmt.Sprintf(", and more: call again with after: %d", cursor)
+	}
+	return summary + "."
+}
+
+// changesScope is the client (client_id) or engagement (engagement_ref)
+// changes are asked for, and its name; zeros for all of them.
+func (a *App) changesScope(ctx context.Context, c *Ctx) (clientID, engagementID int64, scopeName string, err error) {
+	if v := c.Query("client_id"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, 0, "", notFound("client")
+		}
+		if err := a.store.QueryRowContext(ctx, `SELECT name FROM clients WHERE id = ?`, id).Scan(&scopeName); isNoRows(err) {
+			return 0, 0, "", notFound("client")
+		} else if err != nil {
+			return 0, 0, "", err
+		}
+		clientID = id
+	}
+	if ref := c.Query("engagement_ref"); ref != "" {
+		if err := a.store.QueryRowContext(ctx, `SELECT id, ref FROM engagements WHERE ref = ?`, strings.ToUpper(ref)).Scan(&engagementID, &scopeName); isNoRows(err) {
+			return 0, 0, "", notFound("engagement")
+		} else if err != nil {
+			return 0, 0, "", err
+		}
+	}
+	return clientID, engagementID, scopeName, nil
 }
 
 func idArgsStrings(list []string) []any {

@@ -47,7 +47,7 @@ type AccessToken struct {
 	RefreshPlaintext string
 }
 
-const tokenColumns = `id, COALESCE(user_id, 0), COALESCE(contact_id, 0), name, kind, read_only, COALESCE(oauth_client_id, 0), expires_at, last_used_at, paused_at, revoked_at, created_at`
+const tokenColumns = `id, COALESCE(user_id, 0), COALESCE(contact_id, 0), name, kind, read_only, COALESCE(oauth_client_id, 0), expires_at, last_used_at, paused_at, revoked_at, created_at` //nolint:gosec // column names, not a credential
 
 func scanToken(r interface{ Scan(...any) error }) (*AccessToken, error) {
 	var t AccessToken
@@ -56,7 +56,7 @@ func scanToken(r interface{ Scan(...any) error }) (*AccessToken, error) {
 }
 
 // liveTokens is the WHERE for tokens not revoked and not expired.
-const liveTokens = `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`
+const liveTokens = `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)` //nolint:gosec // a WHERE clause, not a credential
 
 // base58 is Rails' SecureRandom.base58 alphabet.
 const base58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"

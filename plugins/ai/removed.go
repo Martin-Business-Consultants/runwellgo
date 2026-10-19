@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -58,15 +59,16 @@ func removedPerson(ctx context.Context, api *plugin.API, data json.RawMessage) e
 		if err != nil {
 			return err
 		}
-		for rows.Next() {
+		if err := eachRow(rows, func(rows *sql.Rows) error {
 			var id int64
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
 				return err
 			}
 			stopped = append(stopped, id)
+			return nil
+		}); err != nil {
+			return err
 		}
-		rows.Close()
 		for _, id := range stopped {
 			if _, err := q.Exec(ctx, `UPDATE ai_runs SET status = 'cancelled', error = ?, finished_at = ?, updated_at = ? WHERE id = ?`,
 				name+" was removed from Runwell before this finished.", now, now, id); err != nil {
@@ -97,16 +99,15 @@ func removedPerson(ctx context.Context, api *plugin.API, data json.RawMessage) e
 			ap      approvers
 		}
 		var list []moved
-		for arows.Next() {
+		if err := eachRow(arows, func(arows *sql.Rows) error {
 			var m moved
 			var raw string
 			if err := arows.Scan(&m.id, &raw, &m.run); err != nil {
-				arows.Close()
 				return err
 			}
 			_ = json.Unmarshal([]byte(raw), &m.ap)
 			if !slices.Contains(m.ap.UserIDs, r.ID) {
-				continue
+				return nil
 			}
 			ids := []int64{}
 			for _, id := range m.ap.UserIDs {
@@ -119,8 +120,10 @@ func removedPerson(ctx context.Context, api *plugin.API, data json.RawMessage) e
 			}
 			m.ap.UserIDs = ids
 			list = append(list, m)
+			return nil
+		}); err != nil {
+			return err
 		}
-		arows.Close()
 		for _, m := range list {
 			raw, _ := json.Marshal(m.ap)
 			if _, err := q.Exec(ctx, `UPDATE ai_approvals SET approvers = ?, updated_at = ? WHERE id = ?`, string(raw), now, m.id); err != nil {
@@ -161,13 +164,13 @@ func withRemoved(ctx context.Context, api *plugin.API, people map[int64]string) 
 	if err != nil {
 		return people
 	}
-	defer rows.Close()
-	for rows.Next() {
+	_ = eachRow(rows, func(rows *sql.Rows) error { // names are a decoration: what was read is enough
 		var id int64
 		var name string
 		if rows.Scan(&id, &name) == nil && people[id] == "" {
 			people[id] = name + " (removed)"
 		}
-	}
+		return nil
+	})
 	return people
 }

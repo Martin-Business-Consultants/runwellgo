@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html"
 	"strings"
@@ -142,7 +143,7 @@ func (a *App) pluginNotificationMail(ctx context.Context, id int64) (*mail.Messa
 	var to, title, body string
 	err := a.store.QueryRowContext(ctx, `SELECT u.email_address, p.title, COALESCE(p.body, '') FROM notifications n JOIN users u ON u.id = n.user_id
 		JOIN plugin_notifications p ON p.id = n.source_id WHERE n.id = ? AND n.source_type = ?`, id, pluginNotificationSource).Scan(&to, &title, &body)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err

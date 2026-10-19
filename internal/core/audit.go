@@ -88,7 +88,8 @@ func (a *App) showAuditLog(c *Ctx) error {
 	}
 	refs := make([]subjectRef, len(events))
 	for i, e := range events {
-		refs[i] = subjectRef{str(e.Get("subject_type")), e.Get("subject_id").(int64)}
+		id, _ := e.Get("subject_id").(int64) // events.subject_id is NOT NULL
+		refs[i] = subjectRef{str(e.Get("subject_type")), id}
 	}
 	names := a.subjectNames(ctx, refs)
 	for i, e := range events {
@@ -132,8 +133,9 @@ func (a *App) auditCSV(c *Ctx, events []Obj) error {
 	_ = w.Write([]string{"when", "kind", "by", "via", "source", "subject_type", "subject_id", "subject", "details"})
 	for _, e := range events {
 		at, _ := e.Get("occurred_at").(store.Time)
+		id, _ := e.Get("subject_id").(int64)
 		_ = w.Write([]string{at.UTC().Format(time.RFC3339), str(e.Get("kind")), str(e.Get("by")), str(e.Get("via")), str(e.Get("source")),
-			str(e.Get("subject_type")), strconv.FormatInt(e.Get("subject_id").(int64), 10), str(e.Get("on")), str(e.Get("details"))})
+			str(e.Get("subject_type")), strconv.FormatInt(id, 10), str(e.Get("on")), str(e.Get("details"))})
 	}
 	w.Flush()
 	return w.Error()
@@ -197,27 +199,9 @@ func (a *App) subjectNames(ctx context.Context, refs []subjectRef) map[subjectRe
 		if typ == "AgreementVersion" {
 			col = "v.id"
 		}
-		rows, err := a.store.QueryContext(ctx, q+` WHERE `+col+` IN (`+store.Placeholders(len(ids))+`)`, idArgs(ids)...)
-		if err != nil {
+		if err := a.subjectNamesOf(ctx, typ, q+` WHERE `+col+` IN (`+store.Placeholders(len(ids))+`)`, ids, out); err != nil {
 			a.log.Warn("subject names", "type", typ, "err", err)
-			continue
 		}
-		for rows.Next() {
-			var id int64
-			var name, path *string
-			if rows.Scan(&id, &name, &path) != nil {
-				continue
-			}
-			n := subjectName{found: true}
-			if name != nil {
-				n.name = *name
-			}
-			if path != nil {
-				n.path = *path
-			}
-			out[subjectRef{typ, id}] = n
-		}
-		rows.Close()
 	}
 	// Someone removed is still named, from their user.removed event.
 	var gone []int64
@@ -230,4 +214,30 @@ func (a *App) subjectNames(ctx context.Context, refs []subjectRef) map[subjectRe
 		out[subjectRef{"User", id}] = subjectName{name: name + " (removed)", found: true}
 	}
 	return out
+}
+
+// subjectNamesOf adds the names q finds for ids, of type typ, to out (as
+// far as it got, on an error).
+func (a *App) subjectNamesOf(ctx context.Context, typ, q string, ids []int64, out map[subjectRef]subjectName) error {
+	rows, err := a.store.QueryContext(ctx, q, idArgs(ids)...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var name, path *string
+		if rows.Scan(&id, &name, &path) != nil {
+			continue
+		}
+		n := subjectName{found: true}
+		if name != nil {
+			n.name = *name
+		}
+		if path != nil {
+			n.path = *path
+		}
+		out[subjectRef{typ, id}] = n
+	}
+	return rows.Err()
 }

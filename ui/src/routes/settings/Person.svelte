@@ -119,7 +119,7 @@
           <Card.Header><Card.Title>Password</Card.Title></Card.Header>
           <Card.Content class="flex flex-col gap-3 text-sm">
             {#if person.you}
-              <p>Change your own in <a href="/settings/account" class="underline underline-offset-4">Your account</a>.</p>
+              <p>Change your own in <a href="/settings/account?tab=security" class="underline underline-offset-4">Your account</a>.</p>
             {:else}
               <div><Button variant="outline" size="sm" onclick={() => act(() => post(`/settings/people/${id}/password`))}><Mail />Email them a link to choose one</Button></div>
               <Collapsible.Root>

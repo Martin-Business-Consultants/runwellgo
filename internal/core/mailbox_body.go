@@ -13,9 +13,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
 	xhtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
 )
 
 // An inbound email, read with net/mail and mime/multipart: its headers,
@@ -344,8 +345,8 @@ func mailQuoteNode(n *xhtml.Node) bool {
 	case atom.Blockquote, atom.Style, atom.Script, atom.Head, atom.Title:
 		return true
 	}
-	classes := strings.Fields(mailAttr(n, "class"))
-	for _, c := range classes {
+	classes := strings.FieldsSeq(mailAttr(n, "class"))
+	for c := range classes {
 		switch c {
 		case "gmail_quote", "gmail_signature", "yahoo_quoted", "moz-cite-prefix", "moz-signature":
 			return true

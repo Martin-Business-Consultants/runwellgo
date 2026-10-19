@@ -75,7 +75,7 @@ func (t *Tx) putBlob(filename, contentType string, r io.Reader) (*Blob, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640) //nolint:gosec // 0640, as the database is: never world-readable
 	if err != nil {
 		return nil, err
 	}

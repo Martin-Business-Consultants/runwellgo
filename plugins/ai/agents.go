@@ -280,7 +280,7 @@ func saveAgent(ctx context.Context, api *plugin.API, req *plugin.Request, g *age
 			return
 		}
 		n := intOf(v)
-		if fmt.Sprint(n) != text || n < 1 {
+		if strconv.FormatInt(n, 10) != text || n < 1 {
 			errs["run_budget_cents"] = append(errs["run_budget_cents"], "must be a whole number of cents, 1 or more")
 			return
 		}
@@ -377,7 +377,7 @@ func strs(v any) []string {
 			}
 		}
 	case string:
-		for _, s := range strings.Split(l, ",") {
+		for s := range strings.SplitSeq(l, ",") {
 			if s = strings.TrimSpace(s); s != "" && !slices.Contains(out, s) {
 				out = append(out, s)
 			}

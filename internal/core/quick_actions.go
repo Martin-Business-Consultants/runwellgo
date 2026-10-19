@@ -234,38 +234,51 @@ func (a *App) quickSearch(ctx context.Context, text string, types []string) ([]O
 			}
 			found = list
 		} else {
-			for _, try := range [][2]string{{"= ?", lowered}, {`LIKE ? ESCAPE '\'`, like + "%"}, {`LIKE ? ESCAPE '\'`, "%" + like + "%"}} {
-				list, err := a.quickRecordsWhere(ctx, typ, "lower("+quickName[typ]+") "+try[0], "id", 8, try[1])
-				if err != nil {
-					return nil, err
-				}
-				if len(list) > 0 {
-					found = list
-					break
-				}
+			list, err := a.quickMatches(ctx, typ, text, lowered, like)
+			if err != nil {
+				return nil, err
 			}
-			if len(found) == 0 {
-				hits, err := a.search(ctx, text)
-				if err != nil {
-					return nil, err
-				}
-				for _, h := range hits {
-					if h.Type != typ || len(found) == 8 {
-						continue
-					}
-					list, err := a.quickRecordsWhere(ctx, typ, "id = ?", "id", 1, h.ID)
-					if err != nil {
-						return nil, err
-					}
-					found = append(found, list...)
-				}
-			}
+			found = list
 		}
 		for _, r := range found {
 			out = append(out, r.json())
 		}
 	}
 	return out[:min(20, len(out))], nil
+}
+
+// quickMatches are typ's records whose name is text (lowered), starts
+// with or contains it (like, escaped), or else the search index's, eight
+// at most.
+func (a *App) quickMatches(ctx context.Context, typ, text, lowered, like string) ([]quickRecord, error) {
+	var found []quickRecord
+	for _, try := range [][2]string{{"= ?", lowered}, {`LIKE ? ESCAPE '\'`, like + "%"}, {`LIKE ? ESCAPE '\'`, "%" + like + "%"}} {
+		list, err := a.quickRecordsWhere(ctx, typ, "lower("+quickName[typ]+") "+try[0], "id", 8, try[1])
+		if err != nil {
+			return nil, err
+		}
+		if len(list) > 0 {
+			found = list
+			break
+		}
+	}
+	if len(found) == 0 {
+		hits, err := a.search(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range hits {
+			if h.Type != typ || len(found) == 8 {
+				continue
+			}
+			list, err := a.quickRecordsWhere(ctx, typ, "id = ?", "id", 1, h.ID)
+			if err != nil {
+				return nil, err
+			}
+			found = append(found, list...)
+		}
+	}
+	return found, nil
 }
 
 var quickRef = regexp.MustCompile(`\A[A-Za-z]+-\d+\z`)
@@ -314,32 +327,9 @@ func (a *App) newQuickAction(c *Ctx) error {
 	}
 	var current *quickRecord
 	if v := c.Query("record"); v != "" {
-		typ, id, err := quickLocate(v, QuickActionRecordTypes)
-		if err != nil {
+		var err error
+		if current, err = a.quickCurrent(ctx, action, v); err != nil {
 			return err
-		}
-		if typ == "Engagement" && id == 0 {
-			_, ref, _ := strings.Cut(v, ":")
-			if err := a.store.QueryRowContext(ctx, `SELECT id FROM engagements WHERE ref = ?`, strings.ToUpper(ref)).Scan(&id); err != nil {
-				return notFound("engagement")
-			}
-			v = fmt.Sprintf("Engagement:%d", id)
-		}
-		if !slices.Contains(action.Types, typ) {
-			typ, id = "", 0
-			if action.Context != nil {
-				typ, id = action.Context(a, ctx, quickTypeOf(v), quickIDOf(v))
-			}
-		}
-		if typ != "" {
-			list, err := a.quickRecordsWhere(ctx, typ, "id = ?", "id", 1, id)
-			if err != nil {
-				return err
-			}
-			if len(list) == 0 {
-				return notFound(strings.ToLower(typ))
-			}
-			current = &list[0]
 		}
 	}
 	records, err := a.quickStarting(ctx, current, action.Types)
@@ -351,6 +341,39 @@ func (a *App) newQuickAction(c *Ctx) error {
 		record = current.json()
 	}
 	return c.JSON(200, O("action", quickActionJSON(action), "record", record, "records", records))
+}
+
+// quickCurrent is the record v ("Engagement:12", or by ref) names, or the
+// nearest one action takes: nil for none.
+func (a *App) quickCurrent(ctx context.Context, action *QuickAction, v string) (*quickRecord, error) {
+	typ, id, err := quickLocate(v, QuickActionRecordTypes)
+	if err != nil {
+		return nil, err
+	}
+	if typ == "Engagement" && id == 0 {
+		_, ref, _ := strings.Cut(v, ":")
+		if err := a.store.QueryRowContext(ctx, `SELECT id FROM engagements WHERE ref = ?`, strings.ToUpper(ref)).Scan(&id); err != nil {
+			return nil, notFound("engagement")
+		}
+		v = fmt.Sprintf("Engagement:%d", id)
+	}
+	if !slices.Contains(action.Types, typ) {
+		typ, id = "", 0
+		if action.Context != nil {
+			typ, id = action.Context(a, ctx, quickTypeOf(v), quickIDOf(v))
+		}
+	}
+	if typ != "" {
+		list, err := a.quickRecordsWhere(ctx, typ, "id = ?", "id", 1, id)
+		if err != nil {
+			return nil, err
+		}
+		if len(list) == 0 {
+			return nil, notFound(strings.ToLower(typ))
+		}
+		return &list[0], nil
+	}
+	return nil, nil
 }
 
 func quickTypeOf(v string) string { t, _, _ := strings.Cut(v, ":"); return t }

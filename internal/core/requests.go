@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -805,7 +806,7 @@ func (a *App) eachRequest(c *Ctx, body map[string]any, done string, fn func(t *T
 			continue
 		}
 		if reason == "" {
-			if e, ok := err.(*apierr.Error); ok && e.Status < 500 {
+			if e, ok := errors.AsType[*apierr.Error](err); ok && e.Status < 500 {
 				reason = e.Message
 			} else {
 				return err

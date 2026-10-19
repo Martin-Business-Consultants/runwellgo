@@ -76,7 +76,7 @@
       Under <em>Variables</em>:
       <table>
         <tr><th>Name</th><th>Value</th><th></th></tr>
-        <tr><td><code>SITE_KEY</code></td><td><code>brem</code></td><td>Required. The install's name. It ties the volume to this install.</td></tr>
+        <tr><td><code>SITE_KEY</code></td><td><code>brem</code></td><td>Recommended. The install's name: the first start records it in the volume, and a container with a different one refuses that volume, so two installs can't share a database by mistake. Without it nothing is checked.</td></tr>
         <tr><td><code>APP_URL</code></td><td><code>https://crm.brem.io</code></td><td>Optional. Settings › Address takes over once set.</td></tr>
         <tr><td><code>SMTP_ADDRESS</code> …</td><td></td><td>Optional. Or set email up in Settings › Email.</td></tr>
       </table>

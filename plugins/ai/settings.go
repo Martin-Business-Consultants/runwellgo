@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -257,72 +259,10 @@ func showSettings(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 	if s.ready() {
 		summary = fmt.Sprintf("AI is on, through %s (%s). %s spent this month.", s.providerName(), s.modelFor(false), dollarsText(dollars, 2))
 	}
-	from := store.TimeOf(monthStart(ctx, api)).DB()
-	byPerson, people := []map[string]any{}, map[int64]string{}
-	rows, err := api.Query(ctx, `SELECT c.user_id, c.contact_id, SUM(u.total_cost) FROM ai_usages u JOIN ai_chats c ON c.id = u.ai_chat_id
-		WHERE u.created_at >= ? GROUP BY c.user_id, c.contact_id ORDER BY SUM(u.total_cost) DESC`, from)
+	byPerson, byKind, used, err := monthUsage(ctx, api)
 	if err != nil {
 		return nil, err
 	}
-	type spend struct {
-		user, contact sql.NullInt64
-		cost          float64
-	}
-	var spends []spend
-	for rows.Next() {
-		var x spend
-		var c sql.NullFloat64
-		if err := rows.Scan(&x.user, &x.contact, &c); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		x.cost = c.Float64
-		spends = append(spends, x)
-	}
-	rows.Close()
-	for id, name := range peopleNames(ctx, api) {
-		people[id] = name
-	}
-	for _, x := range spends {
-		who := "Someone"
-		switch {
-		case x.user.Valid && people[x.user.Int64] != "":
-			who = people[x.user.Int64]
-		case x.contact.Valid:
-			who = "Clients, in their portal"
-		}
-		byPerson = append(byPerson, map[string]any{"user_id": nullInt(x.user), "name": who, "cost": dollarsText(x.cost, 3)})
-	}
-	byKind := map[string]string{}
-	rows, err = api.Query(ctx, `SELECT c.purpose, SUM(u.total_cost) FROM ai_usages u JOIN ai_chats c ON c.id = u.ai_chat_id WHERE u.created_at >= ? GROUP BY c.purpose`, from)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var purpose string
-		var c sql.NullFloat64
-		if err := rows.Scan(&purpose, &c); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		byKind[purpose] = dollarsText(c.Float64, 3)
-	}
-	rows.Close()
-	used := []string{}
-	rows, err = api.Query(ctx, `SELECT kind, SUM(state = 'accepted'), COUNT(*) FROM ai_suggestions WHERE created_at >= ? GROUP BY kind ORDER BY kind`, from)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var kind string
-		var accepted, all int
-		if err := rows.Scan(&kind, &accepted, &all); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		used = append(used, fmt.Sprintf("%s %d of %d", strings.ReplaceAll(kind, "_", " "), accepted, all))
-	}
-	rows.Close()
 	choices := s.modelChoices()
 	var list map[string]any
 	if s.ModelList != nil && s.ModelList["provider"] == s.Provider {
@@ -353,6 +293,79 @@ func showSettings(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 		// models while it can't be had, and every provider's known ones.
 		"model_options": modelOptions(s), "known_models": knownFor(),
 	}), nil
+}
+
+// monthUsage is this month's AI spend by person and by kind, and how many
+// of each kind of suggestion were taken.
+func monthUsage(ctx context.Context, api *plugin.API) (byPerson []map[string]any, byKind map[string]string, used []string, err error) {
+	from := store.TimeOf(monthStart(ctx, api)).DB()
+	byPerson, people := []map[string]any{}, map[int64]string{}
+	rows, err := api.Query(ctx, `SELECT c.user_id, c.contact_id, SUM(u.total_cost) FROM ai_usages u JOIN ai_chats c ON c.id = u.ai_chat_id
+		WHERE u.created_at >= ? GROUP BY c.user_id, c.contact_id ORDER BY SUM(u.total_cost) DESC`, from)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	type spend struct {
+		user, contact sql.NullInt64
+		cost          float64
+	}
+	var spends []spend
+	if err := eachRow(rows, func(rows *sql.Rows) error {
+		var x spend
+		var c sql.NullFloat64
+		if err := rows.Scan(&x.user, &x.contact, &c); err != nil {
+			return err
+		}
+		x.cost = c.Float64
+		spends = append(spends, x)
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+	maps.Copy(people, peopleNames(ctx, api))
+	for _, x := range spends {
+		who := "Someone"
+		switch {
+		case x.user.Valid && people[x.user.Int64] != "":
+			who = people[x.user.Int64]
+		case x.contact.Valid:
+			who = "Clients, in their portal"
+		}
+		byPerson = append(byPerson, map[string]any{"user_id": nullInt(x.user), "name": who, "cost": dollarsText(x.cost, 3)})
+	}
+	byKind = map[string]string{}
+	rows, err = api.Query(ctx, `SELECT c.purpose, SUM(u.total_cost) FROM ai_usages u JOIN ai_chats c ON c.id = u.ai_chat_id WHERE u.created_at >= ? GROUP BY c.purpose`, from)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := eachRow(rows, func(rows *sql.Rows) error {
+		var purpose string
+		var c sql.NullFloat64
+		if err := rows.Scan(&purpose, &c); err != nil {
+			return err
+		}
+		byKind[purpose] = dollarsText(c.Float64, 3)
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+	used = []string{}
+	rows, err = api.Query(ctx, `SELECT kind, SUM(state = 'accepted'), COUNT(*) FROM ai_suggestions WHERE created_at >= ? GROUP BY kind ORDER BY kind`, from)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := eachRow(rows, func(rows *sql.Rows) error {
+		var kind string
+		var accepted, all int
+		if err := rows.Scan(&kind, &accepted, &all); err != nil {
+			return err
+		}
+		used = append(used, fmt.Sprintf("%s %d of %d", strings.ReplaceAll(kind, "_", " "), accepted, all))
+		return nil
+	}); err != nil {
+		return nil, nil, nil, err
+	}
+	return byPerson, byKind, used, nil
 }
 
 // modelChoices are the provider's models to pick from once fetched, with
@@ -407,13 +420,43 @@ func updateSettings(ctx context.Context, api *plugin.API, req *plugin.Request) (
 			return
 		}
 		n := intOf(v)
-		if fmt.Sprint(n) != text || n < 0 {
+		if strconv.FormatInt(n, 10) != text || n < 0 {
 			errs["monthly_budget_cents"] = append(errs["monthly_budget_cents"], "must be a whole number of cents, 0 or more")
 			return
 		}
 		s.BudgetCents = &n
 	})
 	key := strings.TrimSpace(str(in["api_key"]))
+	s.check(&was, in, key, errs)
+	if len(errs) > 0 {
+		return plugin.Invalid(errs), nil
+	}
+	if key != "" {
+		if s.APIKey, err = api.Seal(key); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := api.Exec(ctx, `UPDATE ai_settings SET enabled = ?, provider = ?, api_key = ?, api_base = ?, model = ?, fast_model = ?, monthly_budget_cents = ?, portal = ?, updated_at = ? WHERE id = ?`,
+		s.Enabled, nullStr(s.Provider), nullStr(s.APIKey), nullStr(s.APIBase), nullStr(s.Model), nullStr(s.FastModel), s.BudgetCents, s.Portal, store.Now().DB(), s.ID); err != nil {
+		return nil, err
+	}
+	api.Log(fmt.Sprintf("settings.ai by %s: on %v, provider %q, model %q", req.Actor.Name, s.Enabled, s.Provider, s.modelFor(false)))
+	if s.Provider != "" && (s.Provider != was.Provider || key != "" || s.APIBase != was.APIBase) {
+		refreshModelsLater(ctx, api, s)
+	}
+	message := "AI settings saved."
+	switch {
+	case s.ready():
+		message = "AI is on, through " + s.providerName() + "."
+	case !s.Enabled:
+		message = "AI settings saved, and AI is off."
+	}
+	return plugin.JSON(200, map[string]any{"message": message, "summary": message}), nil
+}
+
+// check adds to errs what's wrong with the settings as changed from was
+// (in, with key the API key sent), and drops models another provider's.
+func (s *setting) check(was *setting, in map[string]any, key string, errs map[string][]string) {
 	if s.Provider != "" && providerFor(s.Provider) == nil {
 		errs["provider"] = append(errs["provider"], "is not included in the list")
 	}
@@ -439,30 +482,6 @@ func updateSettings(ctx context.Context, api *plugin.API, req *plugin.Request) (
 			errs["api_key"] = append(errs["api_key"], "is needed for "+p.Name)
 		}
 	}
-	if len(errs) > 0 {
-		return plugin.Invalid(errs), nil
-	}
-	if key != "" {
-		if s.APIKey, err = api.Seal(key); err != nil {
-			return nil, err
-		}
-	}
-	if _, err := api.Exec(ctx, `UPDATE ai_settings SET enabled = ?, provider = ?, api_key = ?, api_base = ?, model = ?, fast_model = ?, monthly_budget_cents = ?, portal = ?, updated_at = ? WHERE id = ?`,
-		s.Enabled, nullStr(s.Provider), nullStr(s.APIKey), nullStr(s.APIBase), nullStr(s.Model), nullStr(s.FastModel), s.BudgetCents, s.Portal, store.Now().DB(), s.ID); err != nil {
-		return nil, err
-	}
-	api.Log(fmt.Sprintf("settings.ai by %s: on %v, provider %q, model %q", req.Actor.Name, s.Enabled, s.Provider, s.modelFor(false)))
-	if s.Provider != "" && (s.Provider != was.Provider || key != "" || s.APIBase != was.APIBase) {
-		refreshModelsLater(ctx, api, s)
-	}
-	message := "AI settings saved."
-	switch {
-	case s.ready():
-		message = "AI is on, through " + s.providerName() + "."
-	case !s.Enabled:
-		message = "AI settings saved, and AI is off."
-	}
-	return plugin.JSON(200, map[string]any{"message": message, "summary": message}), nil
 }
 
 // refreshModelsLater asks the provider for its models in the background

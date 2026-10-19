@@ -146,7 +146,7 @@ func portalDecide(ctx context.Context, api *plugin.API, req *plugin.Request) (*p
 	contact := req.Contact
 	run := func(ctx context.Context, name string, args map[string]any) (map[string]any, error) {
 		if !contains(portalAllowed, name) {
-			return nil, errors.New("Not available here.")
+			return nil, errors.New("Not available here.") //nolint:staticcheck // the words the client is shown, as the other refusals
 		}
 		return api.RunPortalTool(ctx, contact, name, args)
 	}

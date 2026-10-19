@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -289,9 +290,7 @@ func (a *App) sendTestMessage(c *Ctx) error {
 				return err
 			}
 			m := raw.Map()
-			for k, v := range outcome {
-				m[k] = v
-			}
+			maps.Copy(m, outcome)
 			return t.update("settings", s.ID, map[string]any{"test_email": string(store.MustJSON(m))})
 		})
 	}

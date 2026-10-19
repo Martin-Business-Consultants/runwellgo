@@ -62,16 +62,18 @@ func removePerson(ctx context.Context, api *plugin.API, r removal) error {
 			if err != nil {
 				return err
 			}
+			defer rows.Close()
 			var channels []int64
 			for rows.Next() {
 				var id int64
 				if err := rows.Scan(&id); err != nil {
-					rows.Close()
 					return err
 				}
 				channels = append(channels, id)
 			}
-			rows.Close()
+			if err := rows.Err(); err != nil {
+				return err
+			}
 			for _, id := range channels {
 				if err := addTo(ctx, q, id, []int64{r.SuccessorID}, now); err != nil {
 					return err
