@@ -153,7 +153,7 @@
       {#if images.length}
         <div class="mt-1.5 flex flex-wrap gap-2">
           {#each images as f (f.id)}
-            <button type="button" class="bg-muted focus-visible:ring-ring/50 overflow-hidden rounded-lg border outline-none focus-visible:ring-[3px]" onclick={() => (viewing = f)} aria-label="Open {f.filename} full size">
+            <button type="button" class="focus-visible:ring-ring/50 overflow-hidden rounded-lg border outline-none focus-visible:ring-[3px]" onclick={() => (viewing = f)} aria-label="Open {f.filename} full size">
               <img src={f.url} alt={f.filename} width={f.width || undefined} height={f.height || undefined} loading="lazy"
                 class="block h-auto max-h-60 w-auto max-w-[min(20rem,100%)] object-contain" />
             </button>

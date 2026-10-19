@@ -24,7 +24,8 @@
   <Sidebar.Header>
     <Sidebar.Menu>
       <Sidebar.MenuItem>
-        <Sidebar.MenuButton size="lg">
+        <!-- A logo stands on the sidebar as it is: no hover box behind it. -->
+        <Sidebar.MenuButton size="lg" class={appearance.logoUrl ? "hover:bg-transparent active:bg-transparent focus-visible:bg-transparent" : ""}>
           {#snippet child({ props })}
             <a href="/" onclick={close} {...props}>
               {#if appearance.logoUrl}
