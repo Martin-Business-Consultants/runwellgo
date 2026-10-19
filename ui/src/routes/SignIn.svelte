@@ -33,7 +33,7 @@
   }
 </script>
 
-<PublicLayout title={challenge ? "Enter your code" : "Welcome back"} description={challenge ? "From your authenticator app, or a recovery code." : "Sign in with your email and password."}>
+<PublicLayout audience={challenge ? "" : "team"} title={challenge ? "Enter your code" : "Team sign in"} description={challenge ? "From your authenticator app, or a recovery code." : "For your team, with your email and password. Clients sign in under Client."}>
   <form onsubmit={submit}>
     <Field.Group>
       {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}

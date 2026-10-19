@@ -20,7 +20,7 @@
   }
 </script>
 
-<PublicLayout title="Email me a link" description="If you’ve switched on sign-in by link (Settings › Your account), we’ll email you one. No password needed.">
+<PublicLayout audience="team" title="Email me a link" description="For your team, if you’ve switched on sign-in by link (Settings › Your account). Clients sign in under Client.">
   {#if sent}
     <Field.Group>
       <Alert.Root><Alert.Description>{sent}</Alert.Description></Alert.Root>

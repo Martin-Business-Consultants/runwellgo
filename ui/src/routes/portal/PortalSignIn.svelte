@@ -24,7 +24,7 @@
   }
 </script>
 
-<PublicLayout title="Client sign in" description="Enter the email we have on file and we’ll send you a sign-in link. No password needed.">
+<PublicLayout audience="client" title="Client sign in" description="Enter the email we have on file and we’ll send you a sign-in link. No password needed.">
   <form onsubmit={submit}>
     <Field.Group>
       {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
