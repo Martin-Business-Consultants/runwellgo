@@ -71,7 +71,10 @@ func (a *App) requestRoutes(mux *http.ServeMux) {
 			bodyParam("price_cents", "integer", "The item's price in cents.", false)))
 	a.handle(mux, "POST /api/requests/{id}/promote_todo", a.promoteRequestTodo, need("triage_requests"),
 		tool("promote_request_to_todo", "Triage: make a request a todo",
-			bodyParam("engagement_ref", "string", "The engagement, like WO-12.", true),
+			note("Give engagement_ref for an engagement already open, or new_engagement to start one for it in the same step."),
+			bodyParam("engagement_ref", "string", "The engagement, like WO-12.", false),
+			bodyParam("new_engagement", "object", `Instead of engagement_ref: {title (defaults to the request's subject), label: project|work_order|service}.`, false),
+			bodyParam("client_id", "integer", "For a request with no client, with new_engagement: whose it is.", false),
 			bodyParam("owner_id", "integer", "Who leads it.", false),
 			bodyParam("due_on", "string", "When it's due, YYYY-MM-DD.", false)))
 	a.handle(mux, "POST /api/requests/{id}/promote_commitment", a.promoteRequestCommitment, need("triage_requests"),

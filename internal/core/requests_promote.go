@@ -295,12 +295,34 @@ func (a *App) promoteRequestTodo(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(str(body["engagement_ref"])) == "" {
-		return reqMissing("engagement_ref")
-	}
-	engID, ref, err := a.promoteEngagementByRef(c, str(body["engagement_ref"]))
-	if err != nil {
-		return err
+	// new_engagement starts one for the work to go on, in the same step, for
+	// a client with none open (or none that fits).
+	fresh, _ := body["new_engagement"].(map[string]any)
+	var engID int64
+	var ref string
+	var fields map[string]any
+	if fresh != nil {
+		clientID := q.ClientID
+		if clientID == 0 {
+			clientID, _ = intOf(body["client_id"])
+		}
+		if clientID == 0 {
+			return reqRefused("request has no client")
+		}
+		title := strings.TrimSpace(str(fresh["title"]))
+		if title == "" {
+			title = q.Subject
+		}
+		if fields, err = a.engagementParams(c.R.Context(), map[string]any{"client_id": clientID, "title": title, "label": fresh["label"]}, false); err != nil {
+			return err
+		}
+	} else {
+		if strings.TrimSpace(str(body["engagement_ref"])) == "" {
+			return reqMissing("engagement_ref")
+		}
+		if engID, ref, err = a.promoteEngagementByRef(c, str(body["engagement_ref"])); err != nil {
+			return err
+		}
 	}
 	var owner int64
 	if id, ok := intOf(body["owner_id"]); ok && id != 0 {
@@ -309,6 +331,14 @@ func (a *App) promoteRequestTodo(c *Ctx) error {
 	err = a.write(c.R.Context(), c.Actor, func(t *Tx) error {
 		if !q.Open() {
 			return reqRefused("already triaged")
+		}
+		if fields != nil {
+			if err := t.reqAdoptClient(q, fields["client_id"]); err != nil {
+				return err
+			}
+			if engID, ref, _, err = t.insertEngagement(fields, nil); err != nil {
+				return err
+			}
 		}
 		todo, err := t.reqInsertTodo(engID, q.Subject, nullable(q.Body), owner, reqDate(body["due_on"]))
 		if err != nil {
@@ -319,7 +349,11 @@ func (a *App) promoteRequestTodo(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	c.Summary = "Added as work on " + ref + "."
+	if fields != nil {
+		c.Summary = "Started " + ref + " and added this as work on it."
+	} else {
+		c.Summary = "Added as work on " + ref + "."
+	}
 	return c.JSON(200, O("summary", c.Summary, "path", "/engagements/"+ref))
 }
 

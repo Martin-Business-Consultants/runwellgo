@@ -845,6 +845,49 @@ func (t *Tx) nextRef(label string) (string, error) {
 	return fmt.Sprintf("%s-%d", prefix, last+1), nil
 }
 
+// insertEngagement starts an engagement from checked fields (engagementParams)
+// and its custom field values: its ref, its history, and, for a client
+// that isn't us, the draft agreement it starts with.
+func (t *Tx) insertEngagement(fields, custom map[string]any) (id int64, ref string, internal bool, err error) {
+	if ref, err = t.nextRef(str(fields["label"])); err != nil {
+		return 0, "", false, err
+	}
+	if err := t.QueryRow(`SELECT internal FROM clients WHERE id = ?`, fields["client_id"]).Scan(&internal); err != nil {
+		return 0, "", false, err
+	}
+	now := store.Now().DB()
+	var createdBy any
+	if uid := t.Actor.UserID(); uid != 0 {
+		createdBy = uid
+	}
+	id, err = t.Insert(`INSERT INTO engagements (client_id, ref, label, shape, title, description, estimate_notes, created_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		fields["client_id"], ref, fields["label"], fields["shape"], fields["title"], fields["description"], fields["estimate_notes"], createdBy, now, now)
+	if err != nil {
+		return 0, "", false, err
+	}
+	if custom != nil {
+		if err := t.setCustomFields("Engagement", id, custom); err != nil {
+			return 0, "", false, err
+		}
+	}
+	t.Reindex("Engagement", id)
+	if err := t.Event("Engagement", id, "engagement.created", nil); err != nil {
+		return 0, "", false, err
+	}
+	if err := t.recordMentions("Engagement", id, str(fields["description"])+" "+str(fields["estimate_notes"])); err != nil {
+		return 0, "", false, err
+	}
+	if internal {
+		return id, ref, true, nil
+	}
+	e, err := t.App.engagementByID(t.Ctx, t, id)
+	if err != nil {
+		return 0, "", false, err
+	}
+	_, err = t.draftVersion(e, "", "", "")
+	return id, ref, false, err
+}
+
 func (a *App) createEngagement(c *Ctx) error {
 	body, err := c.Wrapped("engagement")
 	if err != nil {
@@ -866,42 +909,8 @@ func (a *App) createEngagement(c *Ctx) error {
 	var ref string
 	var internal bool
 	err = a.write(ctx, c.Actor, func(t *Tx) error {
-		if ref, err = t.nextRef(str(fields["label"])); err != nil {
-			return err
-		}
-		if err := t.QueryRow(`SELECT internal FROM clients WHERE id = ?`, fields["client_id"]).Scan(&internal); err != nil {
-			return err
-		}
-		now := store.Now().DB()
-		var createdBy any
-		if uid := c.Actor.UserID(); uid != 0 {
-			createdBy = uid
-		}
-		id, err = t.Insert(`INSERT INTO engagements (client_id, ref, label, shape, title, description, estimate_notes, created_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			fields["client_id"], ref, fields["label"], fields["shape"], fields["title"], fields["description"], fields["estimate_notes"], createdBy, now, now)
-		if err != nil {
-			return err
-		}
-		if custom, ok := body["custom_fields"].(map[string]any); ok {
-			if err := t.setCustomFields("Engagement", id, custom); err != nil {
-				return err
-			}
-		}
-		t.Reindex("Engagement", id)
-		if err := t.Event("Engagement", id, "engagement.created", nil); err != nil {
-			return err
-		}
-		if err := t.recordMentions("Engagement", id, str(fields["description"])+" "+str(fields["estimate_notes"])); err != nil {
-			return err
-		}
-		if internal {
-			return nil
-		}
-		e, err := t.App.engagementByID(t.Ctx, t, id)
-		if err != nil {
-			return err
-		}
-		_, err = t.draftVersion(e, "", "", "")
+		custom, _ := body["custom_fields"].(map[string]any)
+		id, ref, internal, err = t.insertEngagement(fields, custom)
 		return err
 	})
 	if err != nil {

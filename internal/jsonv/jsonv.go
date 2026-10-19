@@ -55,6 +55,11 @@ func Int(v any) (int64, bool) {
 	case json.Number:
 		n, err := x.Int64()
 		return n, err == nil
+	// Go's own, for a body the server builds.
+	case int64:
+		return x, true
+	case int:
+		return int64(x), true
 	}
 	return 0, false
 }
