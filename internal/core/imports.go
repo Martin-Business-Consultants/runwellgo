@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/backup"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/backup"
 )
 
 // Settings › Import: an owner uploads a backup from the Rails core (its
@@ -95,7 +95,7 @@ func (a *App) createImport(c *Ctx) error {
 	if err := backup.Discard(a.cfg.DataDir); err != nil { // one waiting at a time
 		return err
 	}
-	rep, err := backup.Stage(c.R.Context(), a.cfg.DataDir, upload, backup.Options{Password: password, PluginTables: PluginTables})
+	rep, err := backup.Stage(c.R.Context(), a.cfg.DataDir, upload, backup.Options{Password: password, PluginTables: PluginTables(a.cfg.Plugins)})
 	if errors.Is(err, backup.ErrNeedsPassword) {
 		return &apierr.Error{Status: 422, Code: "needs_password", Message: err.Error(), Errors: map[string][]string{"password": {"is needed: a data export has no passwords"}}}
 	}

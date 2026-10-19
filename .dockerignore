@@ -13,4 +13,4 @@ contracts
 docs
 **/node_modules
 coverage.out
-runwell
+cmd/runwell/runwell

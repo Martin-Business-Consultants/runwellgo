@@ -1,4 +1,4 @@
-module github.com/Martin-Business-Consultants/runwellgo
+module github.com/Martin-Business-Consultants/runwellgo/v3
 
 go 1.26.0
 

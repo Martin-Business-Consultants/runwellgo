@@ -1,5 +1,5 @@
-// Places in the app's own screens where a built-in plugin's Svelte screens
-// (ui/src/plugins/<key>) draw a component of theirs, from their index.js:
+// Places in the app's own screens where an official plugin's Svelte screens
+// (its ui/, copied into ui/src/plugins/<key>) draw a component of theirs, from their index.js:
 //
 //   addSlot("client_aside", { key: "ai", component: ClientAside, order: 10 });
 //

@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // What a plugin granted "tools" reaches (plugin.API.Tools / RunTool): the

@@ -10,16 +10,23 @@ and port what they do, not a guess at it. Its `AGENTS.md` explains the domain.
 
 | Path | What |
 | --- | --- |
-| `cmd/runwell` | The binary: `serve`, `user …`, `search reindex`, `update`, and the CLI (`internal/cli`) |
+| `cmd/runwell` | The official binary, a module of its own: a `main` that calls `runwell.Main` with the official plugins. Its `go.mod` requires them at their tags and replaces the core with `../..` |
+| `runwell` | Runwell as a library: `runwell.Main(version, plugins...)`, the command line (`serve`, `user …`, `search reindex`, `import`, `update`, and the CLI, `internal/cli`) |
 | `internal/core` | Runwell itself: one package, one file (or a few) per area of the app |
 | `internal/store` | SQLite: `schema.sql` (the Rails tables, so a Rails database opens as it is, plus the Go core's own), migrations, column types (`store.Time`, `store.JSON`, `store.NullInt`) |
-| `internal/plugin` | The plugin host: plugins are Go packages compiled in (`plugins/<key>`) |
+| `plugin`, `plugintest` | The public plugin API and host, and its test kit. Versioned: within v3 they only grow (docs/plugins.md). Plugins are Go modules in their own repositories (`runwellgo-ai`, `runwellgo-chat`, …), compiled in through `cmd/runwell` |
 | `internal/{apierr,mail,secret,ratelimit,update,webhook,outbound,datalock,jsonv,cli}` | Infrastructure, from librepublishgo |
 | `internal/admin` | Embeds `ui/` built into `internal/admin/dist` and serves it for every path that isn't `/api`, `/mcp` or `/up` |
 | `ui/` | The app: Svelte 5, Tailwind 4, shadcn-svelte, lucide icons |
 
-`make build`, `make run` (`:8080`, data in `./data`), `cd ui && npm run check && npm run build`.
-Go and Node come from mise: run Go as `mise exec -- go …` in this directory.
+`make build`, `make run` (`:8080`, data in `./data`), `make plugin-ui` (copies the official plugins'
+Svelte screens in from their modules, `ui/src/plugins/<key>/`, gitignored), then
+`cd ui && npm run check && npm run build`. Go and Node come from mise: run Go as `mise exec -- go …`
+in this directory. Two modules: the root (`github.com/Martin-Business-Consultants/runwellgo/v3`)
+and `cmd/runwell`; `go.work` joins them, and a plugin checkout beside this one joins with
+`go work use ../runwellgo-ai` (don't commit that). `make test` and `make lint` cover both. A
+plugin's code changes in its own repository; a new version reaches the binary when
+`cmd/runwell/go.mod` requires its tag.
 
 ## Backend conventions (`internal/core`)
 

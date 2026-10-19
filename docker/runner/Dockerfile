@@ -21,6 +21,8 @@
 
 FROM golang:1.26.9-bookworm AS build
 WORKDIR /src
+# The runner is in the core's module; go.work (local development) isn't needed.
+ENV GOWORK=off
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .

@@ -3,7 +3,7 @@ package core
 import (
 	"net/http"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
 )
 
 // Who's on a piece of work: its owner (the lead) and anyone else, Fizzy's

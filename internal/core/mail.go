@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/mail"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/mail"
 )
 
 // Mail goes out through the SMTP server in the environment (SMTP_ADDRESS

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
-	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // Settings › Plugins: the plugins this build has, each installed, granted
@@ -445,7 +445,7 @@ func (a *App) pluginExtensions(c *Ctx) error {
 			}
 		}
 	}
-	// Which plugins are on: a built-in plugin's own screens (ui/src/plugins)
+	// Which plugins are on: an official plugin's own screens (its ui/)
 	// show only while it is.
 	enabled := []string{}
 	for _, p := range a.enabledPlugins() {

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/plugin"
 )
 
 // Records reads the install's custom fields, and a client's values by key

@@ -19,16 +19,28 @@ passwords. Its agent tools keep the Rails names and answers. `AGENTS.md` is the 
 on it; `docs/plugins.md` is how to extend it, and `docs/runners.md` how to hand code to a machine
 of yours with the Runners plugin and `runwell-runner`.
 
+Runwell is a library with a public plugin API (`plugin`, `plugintest`), and the official binary
+is a small `main` ([cmd/runwell](cmd/runwell/main.go)) that hands `runwell.Main` the official
+plugins, each in its own repository: [AI](https://github.com/Martin-Business-Consultants/runwellgo-ai),
+[Chat](https://github.com/Martin-Business-Consultants/runwellgo-chat),
+[Reports](https://github.com/Martin-Business-Consultants/runwellgo-reports),
+[Runners](https://github.com/Martin-Business-Consultants/runwellgo-runners),
+[Websites](https://github.com/Martin-Business-Consultants/runwellgo-websites),
+[My day](https://github.com/Martin-Business-Consultants/runwellgo-my-day),
+[Time tracking](https://github.com/Martin-Business-Consultants/runwellgo-time-tracking) and
+[Hello](https://github.com/Martin-Business-Consultants/runwellgo-plugin-template), the template for a
+new one. A Runwell with plugins of your own is a ten-line `main.go` (docs/plugins.md).
+
 ## Running it
 
 From source (Go 1.26 and Node; `mise install` sets them up):
 
 ```sh
 make run      # go run …serve --data ./data, on :8080
-make ui       # the app (ui/: Svelte, shadcn-svelte) into internal/admin/dist, which the binary embeds
+make ui       # the app (ui/: Svelte, shadcn-svelte, the plugins' screens) into internal/admin/dist, which the binary embeds
 make ui-dev   # the app with hot reload on :5173, against make run
-make build    # dist/runwell for this machine
-make test     # vet + tests
+make build    # dist/runwell (and dist/runwell-runner) for this machine
+make test     # vet + tests, both modules (the core, and cmd/runwell with the plugins)
 make dist     # every platform, with checksums.txt
 ```
 
@@ -76,7 +88,8 @@ columns and tables the Go core adds; nothing the Rails core reads is changed), f
 Active Storage left them, and everyone signs in again with their password. Two-factor sign-in set
 up under Rails keeps working when the Rails install's `ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY`,
 `ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT` and `SECRET_KEY_BASE` are in the environment.
-Plugins were Rails engines; they're Go packages compiled in now (`plugins/`), so an install's
+Plugins were Rails engines; they're Go modules compiled in now, each in its own repository
+([docs/plugins.md](docs/plugins.md)), so an install's
 plugins come back by being switched on in Settings › Plugins. A Rails plugin's tables are left
 as they were, but a Go plugin keeps its own storage, so what a Rails plugin recorded (time
 entries, say) doesn't carry over.

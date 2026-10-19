@@ -1,7 +1,8 @@
 # Plugins
 
-A plugin is a Go package compiled into Runwell. It builds a `*plugin.Module`
-(`internal/plugin`): a manifest saying what it is, what it needs and what it
+A plugin is a Go module compiled into Runwell, in a repository of its own. It
+builds a `*plugin.Module` (package `plugin`,
+`github.com/Martin-Business-Consultants/runwellgo/v3/plugin`): a manifest saying what it is, what it needs and what it
 adds, the handlers for its routes, the events it hears and the tasks it runs.
 It reaches Runwell only through the `*plugin.API` it's handed on each call,
 which holds the capabilities an owner granted it and nothing else. What it
@@ -20,11 +21,32 @@ imports `database/sql` or `os`, so review that a plugin doesn't.
 
 ## Adding one
 
-1. Write a package under `plugins/<key>` with a `Module() *plugin.Module`.
-   [plugins/hello](../plugins/hello/hello.go) is the smallest;
-   [plugins/time_tracking](../plugins/time_tracking/time_tracking.go) is a real
+Runwell is a library, the way PocketBase is: a binary is a `main` that hands
+`runwell.Main` its version and its plugins, and has those and no others.
+
+1. Write a Go module with a `Module() *plugin.Module`, in its own repository
+   ([below](#writing-a-plugin-in-its-own-repository)).
+   [runwellgo-plugin-template](https://github.com/Martin-Business-Consultants/runwellgo-plugin-template)
+   (Hello) is the smallest;
+   [runwellgo-time-tracking](https://github.com/Martin-Business-Consultants/runwellgo-time-tracking) is a real
    one, the Rails Time tracking plugin ported onto this API.
-2. Add it to `builtinPlugins` in `internal/core/plugins.go`.
+2. Pass its `Module()` to `runwell.Main` in a `main.go`: the official binary's is
+   [cmd/runwell/main.go](../cmd/runwell/main.go), with its version in
+   [cmd/runwell/go.mod](../cmd/runwell/go.mod).
+
+The official plugins, each in its repository and tagged with its manifest's
+version:
+
+| Plugin | Key | Repository |
+| --- | --- | --- |
+| Runwell AI | `ai` | [runwellgo-ai](https://github.com/Martin-Business-Consultants/runwellgo-ai) |
+| Chat | `chat` | [runwellgo-chat](https://github.com/Martin-Business-Consultants/runwellgo-chat) |
+| Reports | `reports` | [runwellgo-reports](https://github.com/Martin-Business-Consultants/runwellgo-reports) |
+| Runners | `runners` | [runwellgo-runners](https://github.com/Martin-Business-Consultants/runwellgo-runners) (the runner itself is `cmd/runwell-runner`, here) |
+| Websites | `website_checklist` | [runwellgo-websites](https://github.com/Martin-Business-Consultants/runwellgo-websites) |
+| My day | `my_day` | [runwellgo-my-day](https://github.com/Martin-Business-Consultants/runwellgo-my-day) |
+| Time tracking | `time_tracking` | [runwellgo-time-tracking](https://github.com/Martin-Business-Consultants/runwellgo-time-tracking) |
+| Hello (the example) | `hello` | [runwellgo-plugin-template](https://github.com/Martin-Business-Consultants/runwellgo-plugin-template) |
 
 A build with it lists it under **Settings › Plugins › Add a plugin** until an
 owner installs it. Installed, it starts off; switching it on grants what it
@@ -303,14 +325,15 @@ removed) changes nothing.
   work and commitments.
 - **`client.deleted`**: heard (with the client's name) once a client is deleted, so a plugin can
   clear what it kept on it.
-- **Its own screens**: a built-in plugin may draw pages and record tabs in Svelte, in
-  `ui/src/plugins/<key>/` (see its README), when described screens aren't enough. `Nav.Path` puts
+- **Its own screens**: an official plugin may draw pages and record tabs in Svelte, in its
+  repository's `ui/`, which the app's build copies into `ui/src/plugins/<key>/` (see
+  [its README](../ui/src/plugins/README.md)), when described screens aren't enough. `Nav.Path` puts
   such a page in the sidebar (`"/my-day"`). They're shown only while the plugin is on, and talk
   only to its routes.
 
 ## Acting as the caller, the portal, your own network, secrets and the app's chrome
 
-Generic capabilities a plugin asks for like any other (the AI plugin, `plugins/ai`, is the one that
+Generic capabilities a plugin asks for like any other (the AI plugin, [runwellgo-ai](https://github.com/Martin-Business-Consultants/runwellgo-ai), is the one that
 uses them all); with the plugin off or removed, none of them does anything.
 
 - **`tools`**: `api.Tools(ctx, req.Actor)` is the agent tools (the MCP catalogue, `api_request`
@@ -338,7 +361,7 @@ uses them all); with the plugin off or removed, none of them does anything.
   encrypted values open when Runwell runs with that install's keys. Never send one back to the app.
 - `api.Grants()` is what was granted, so a plugin can say what it can't do yet rather than fail;
   `Site.Location` is the install's zone, to work out dates in.
-- **The app's chrome and record pages** (built-in plugins' own Svelte, `ui/src/plugins/<key>`):
+- **The app's chrome and record pages** (official plugins' own Svelte, their `ui/`):
   `addSlot(name, {key, component, order})` from `$lib/plugin-slots.js` draws a component in a place
   the app's screens hold for plugins, while the plugin is on: `header` (beside Search and Add, on
   every page), `home_top`, `client_aside`, `request_aside`, `scope_item_aside`, `draft_version`,
@@ -352,7 +375,7 @@ uses them all); with the plugin off or removed, none of them does anything.
 ## Live updates, notifications and rich text
 
 For a plugin whose screens change as other people act (a chat): generic grants, like the rest,
-that do nothing while the plugin is off. [plugins/chat](../plugins/chat) uses them all.
+that do nothing while the plugin is off. [runwellgo-chat](https://github.com/Martin-Business-Consultants/runwellgo-chat) uses them all.
 
 - **`live`**: `api.Publish(ctx, topic, userIDs, data)` pushes `data` (JSON, 64 KB at most) to the
   open tabs of the people named, as an event on `topic` (lowercase, `message`, `typing`).
@@ -381,7 +404,7 @@ that do nothing while the plugin is off. [plugins/chat](../plugins/chat) uses th
 
 ## Numbers for reports
 
-A generic, read-only grant for a plugin that reports on the business ([plugins/reports](../plugins/reports)
+A generic, read-only grant for a plugin that reports on the business ([runwellgo-reports](https://github.com/Martin-Business-Consultants/runwellgo-reports)
 uses it); with the plugin off, nothing reads it.
 
 - **`metrics`**: `api.Metrics(ctx, plugin.MetricsQuery{Since, ClientID})` answers the install's
@@ -400,8 +423,8 @@ uses it); with the plugin off, nothing reads it.
 
 ## Content from other sites
 
-A generic grant for a built-in plugin whose own Svelte screens load something from another site
-(a map provider's script, tiles and fonts; [plugins/reports](../plugins/reports) loads Google
+A generic grant for an official plugin whose own Svelte screens load something from another site
+(a map provider's script, tiles and fonts; [runwellgo-reports](https://github.com/Martin-Business-Consultants/runwellgo-reports) loads Google
 Maps); with the plugin off or the grant unticked, the app's pages load only from this server.
 
 - **`content:external`** ("Load content from other sites"): the manifest's `Content` names the
@@ -416,8 +439,8 @@ Maps); with the plugin off or the grant unticked, the app's pages load only from
 
 ## Mentions, events of its own and approvals
 
-Generic grants, like the rest, that do nothing while the plugin is off. [plugins/ai](../plugins/ai)
-offers its agents as mentionables; [plugins/chat](../plugins/chat) relays the mentions in its
+Generic grants, like the rest, that do nothing while the plugin is off. [runwellgo-ai](https://github.com/Martin-Business-Consultants/runwellgo-ai)
+offers its agents as mentionables; [runwellgo-chat](https://github.com/Martin-Business-Consultants/runwellgo-chat) relays the mentions in its
 messages.
 
 - **`mentionables`**: `Module.Mentionables(ctx, api)` answers names people can @mention that
@@ -483,7 +506,7 @@ your own state as the truth and treat the inbox as where a person is asked.
 
 ## Machines
 
-For a plugin that works with machines rather than people ([plugins/runners](../plugins/runners), a
+For a plugin that works with machines rather than people ([runwellgo-runners](https://github.com/Martin-Business-Consultants/runwellgo-runners), a
 runner on a server of the owner's that does work Runwell hands it): a generic grant, like the rest,
 that does nothing while the plugin is off. See [runners.md](runners.md).
 
@@ -532,6 +555,111 @@ The app reads `GET /api/plugin_extensions` (where the plugins that are on show
 for the person) once someone signs in, and `GET /api/plugin_screens/<key>`
 (the screens they may open and the routes they may write to) to draw a
 plugin's screens.
+
+## The API is a contract
+
+What a plugin may use of Runwell is two packages, versioned with Runwell's
+module (`github.com/Martin-Business-Consultants/runwellgo/v3`):
+
+- **`plugin`**: `Module`, `Manifest`, `Grants`, `API`, `Request`, `Response`
+  and the rest above, and the core's types a plugin meets, named here so it
+  needs nothing internal: `plugin.Time` (a nullable timestamp, the core's
+  column type), `plugin.Now()`, `plugin.TimeOf(t)`, `plugin.MailMessage` (what
+  `Env.SendMail` sends) and `plugin.DB` (the database a `Host` runs on).
+- **`plugintest`**, for its tests: `plugintest.Setup(t, env, Module())` is a
+  host on a fresh database (Runwell's own tables, made as the core makes them)
+  with the plugin installed, granted and on; `plugintest.Env` is a stand-in for
+  the core that answers just enough (no records, no tools, mail that goes
+  nowhere), to embed in a type of your own that answers what a test needs;
+  `DB`, `Open`, `Host`, `Enable`, `Inline` (a `Spawn` that runs at once) and
+  `UserRemoved` are its parts.
+
+Within v3, both only grow: nothing is removed or renamed, and a new field or
+method never changes what an old one does, so a plugin built against v3.1
+builds against every later v3. A change that has to break them is Runwell v4
+(and a `/v4` module path). Everything under `internal/` is Runwell's own and
+can change in any release: Go won't let another module import it.
+
+Keys, table names, manifests and grants are the other half of the contract:
+an install keeps a plugin's data and grants under its key, so a plugin keeps
+its key and tables for good (a newer version adds tables and columns, as
+`Schema` allows).
+
+## Writing a plugin in its own repository
+
+Start from [runwellgo-plugin-template](https://github.com/Martin-Business-Consultants/runwellgo-plugin-template)
+(**Use this template** on GitHub): Hello, a `go.mod` that requires
+`github.com/Martin-Business-Consultants/runwellgo/v3`, a test on `plugintest`,
+the same `.golangci.yml` and a CI workflow (vet, race-checked tests,
+golangci-lint). Give it your own module path and key, and tag releases with
+the manifest's version (`v1.2.0`).
+
+```go
+func TestGreeting(t *testing.T) {
+	h, _ := plugintest.Setup(t, env{}, Module()) // env embeds plugintest.Env
+	res, err := h.Serve(t.Context(), "hello", "client",
+		&plugin.Request{Method: "GET", Query: url.Values{"record": {"Client:7"}}, Actor: &plugin.Caller{ID: 1, Role: "owner"}}, nil)
+	…
+}
+```
+
+**Building Runwell with it** is a `main.go` of your own, in a repository (or
+a directory) of its own, listing every plugin your Runwell has, the official
+ones you want included:
+
+```go
+package main
+
+import (
+	"os"
+
+	ai "github.com/Martin-Business-Consultants/runwellgo-ai"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/runwell"
+	mine "github.com/you/runwell-mine"
+)
+
+var version = "dev" // go build -ldflags "-X main.version=1.0.0"
+
+func main() {
+	os.Exit(runwell.Main(version, ai.Module(), mine.Module()))
+}
+```
+
+`go mod init`, `go get` each module, `go build -o runwell .`: that's the whole
+of Runwell (`serve`, `user`, `import`, `update`, the CLI) with your plugins.
+`runwell import` makes the tables of the plugins it was built with for a data
+export's rows, and the update button installs official releases, which carry
+the official plugins only: a binary of your own updates by being rebuilt.
+
+**Deploying it to Hoster** is the same as deploying Runwell: copy
+[Dockerfile](../Dockerfile), [docker/runwell](../docker/runwell) and
+[config/deploy.yml](../config/deploy.yml) into that repository, and point the
+Dockerfile's build at your main:
+
+```dockerfile
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=
+RUN V="${VERSION:-$(cat VERSION 2>/dev/null || echo dev)}" \
+ && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${V#v}" -o /out/runwell .
+```
+
+Then in Hoster: a new app from your repository, its volume at `/data`, as
+[going-live.html](going-live.html) says for Runwell's own.
+
+**Its screens**: the app your binary serves is the one built into the
+runwellgo module, which carries the official plugins' Svelte screens. A
+plugin of your own draws its screens through its manifest (screens, panels,
+nav, settings, tabs: above), which needs no build of the app. One that needs
+Svelte screens of its own puts them in its `ui/` (an `index.js` exporting
+`key`, `routes` and `setup`, as the official ones do) and is added to the
+official binary: `cmd/runwell/go.mod` requires it and `make plugin-ui` copies
+its `ui/` into the app.
+
+**Working on one beside Runwell**: check it out next to runwellgo and run
+`go work use ../runwell-mine` there (don't commit that line of `go.work`):
+`make build`, `make run` and `make plugin-ui` then use your checkout.
 
 ## Porting a Rails plugin
 

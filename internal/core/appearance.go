@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Martin-Business-Consultants/runwellgo/internal/apierr"
+	"github.com/Martin-Business-Consultants/runwellgo/v3/internal/apierr"
 )
 
 // Settings › Appearance: the theme everyone starts on, the colors, corners,

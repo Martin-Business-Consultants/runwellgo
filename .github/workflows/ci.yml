@@ -18,6 +18,11 @@ env:
   # Newest 1.26 patch, not the go.mod floor (1.26.0 has 30 reachable stdlib vulns).
   GO_VERSION: "1.26.x"
   GOLANGCI_LINT_VERSION: v2.15.0
+  # Two modules: the core (Runwell as a library) and cmd/runwell, the
+  # official binary (the core, replaced by ../.., with the official plugins
+  # at their tags). Each is checked on its own go.mod; go.work is for
+  # local development.
+  GOWORK: "off"
 
 jobs:
   test:
@@ -30,15 +35,25 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            cmd/runwell/go.sum
       - name: Dependencies verify and are tidy
         run: |
           go mod verify
           go mod tidy -diff
+          cd cmd/runwell
+          go mod verify
+          go mod tidy -diff
       - name: Build
-        run: go build ./cmd/... ./internal/... ./plugins/...
+        run: |
+          go build ./...
+          cd cmd/runwell && go build ./...
       - name: Test (race, shuffled, coverage)
-        run: go test -race -shuffle=on -timeout 15m -covermode=atomic -coverprofile=coverage.out ./cmd/... ./internal/... ./plugins/...
+        run: go test -race -shuffle=on -timeout 15m -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Test the binary's module
+        working-directory: cmd/runwell
+        run: go test -race -shuffle=on ./...
       - name: Coverage summary
         run: |
           go tool cover -func=coverage.out | tail -1
@@ -62,13 +77,22 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
       - name: go vet
-        run: go vet ./cmd/... ./internal/... ./plugins/...
+        run: |
+          go vet ./...
+          cd cmd/runwell && go vet ./...
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
-          args: ./cmd/... ./internal/... ./plugins/...
+          args: ./...
           # A PR is judged on what it adds; a push to a branch, on everything.
+          only-new-issues: ${{ github.event_name == 'pull_request' }}
+      - name: golangci-lint (cmd/runwell)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: cmd/runwell
+          args: ./...
           only-new-issues: ${{ github.event_name == 'pull_request' }}
 
   vuln:
@@ -86,8 +110,9 @@ jobs:
       - name: govulncheck
         run: make vuln
 
-  # The admin (ui/): svelte-check, and the build the binary embeds, which
-  # must match what's committed in internal/admin/dist.
+  # The admin (ui/): the official plugins' screens copied in from their
+  # modules (make plugin-ui), svelte-check, and the build the binary embeds,
+  # which must match what's committed in internal/admin/dist.
   ui:
     name: Admin UI
     runs-on: ubuntu-latest
@@ -102,6 +127,13 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: cmd/runwell/go.sum
+      - name: The plugins' screens (make plugin-ui)
+        run: node scripts/plugin-ui.js
       - run: npm ci
       - run: npm run check
       - run: npm run build

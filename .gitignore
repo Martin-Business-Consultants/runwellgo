@@ -1,6 +1,9 @@
 /data/
 /dist/
-/runwell
+/cmd/runwell/runwell
 coverage.out
 /ui/node_modules/
 /runwell-runner
+# The official plugins' screens, copied from their modules (make plugin-ui).
+/ui/src/plugins/*/
+/ui/src/plugins/sources.css
