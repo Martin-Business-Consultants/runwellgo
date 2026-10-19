@@ -1,0 +1,31 @@
+# Weekly dependency updates: minor and patch releases grouped into one PR per
+# ecosystem, majors on their own.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go"]
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "ci"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "ui"]
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+

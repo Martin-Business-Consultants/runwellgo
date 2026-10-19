@@ -1,0 +1,117 @@
+# Format, lint, vet, race-tested tests with coverage, vulnerability scan,
+# and the app's build, on every push and PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Newest 1.26 patch, not the go.mod floor (1.26.0 has 30 reachable stdlib vulns).
+  GO_VERSION: "1.26.x"
+  GOLANGCI_LINT_VERSION: v2.15.0
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: go.sum
+      - name: Dependencies verify and are tidy
+        run: |
+          go mod verify
+          go mod tidy -diff
+      - name: Build
+        run: go build ./cmd/... ./internal/... ./plugins/...
+      - name: Test (race, shuffled, coverage)
+        run: go test -race -shuffle=on -timeout 15m -covermode=atomic -coverprofile=coverage.out ./cmd/... ./internal/... ./plugins/...
+      - name: Coverage summary
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 14
+      - name: Cross-compile every release platform
+        run: make dist
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: go vet
+        run: go vet ./cmd/... ./internal/... ./plugins/...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: ./cmd/... ./internal/... ./plugins/...
+          # A PR is judged on what it adds; a push to a branch, on everything.
+          only-new-issues: ${{ github.event_name == 'pull_request' }}
+
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      # make vuln: govulncheck-action passes its packages as one argument,
+      # which matches nothing when there's more than one pattern.
+      - name: govulncheck
+        run: make vuln
+
+  # The admin (ui/): svelte-check, and the build the binary embeds, which
+  # must match what's committed in internal/admin/dist.
+  ui:
+    name: Admin UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: The committed build is current
+        run: |
+          git diff --exit-code -- ../internal/admin/dist || {
+            echo "::error::internal/admin/dist is stale; run make ui and commit it"
+            exit 1
+          }
+          test -z "$(git status --porcelain -- ../internal/admin/dist)" || {
+            echo "::error::internal/admin/dist has untracked files; run make ui and commit them"
+            exit 1
+          }

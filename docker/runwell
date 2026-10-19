@@ -1,0 +1,15 @@
+#!/bin/sh
+# runwell in the image: the real binary, run as the image's own user
+# (app). Hosts mount their own volume at the data directory, often owned by
+# root, and `docker exec … runwell user create` runs as root: started as
+# root, this gives the data directory to app and runs the binary as app, so
+# nothing in it ends up owned by anyone else. Started as another user (a host
+# that sets one), it runs the binary as that user.
+set -e
+dir="${DATA_DIR:-/data}"
+if [ "$(id -u)" = 0 ]; then
+  mkdir -p "$dir"
+  find "$dir" \! -user app -exec chown app:app {} +
+  exec su-exec app:app /usr/local/libexec/runwell "$@"
+fi
+exec /usr/local/libexec/runwell "$@"

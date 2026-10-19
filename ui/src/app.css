@@ -1,0 +1,263 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+@import "@fontsource-variable/manrope";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Runwell's look. Indigo (#5D63CD, the brand the Rails app shipped as its
+   "Indigo" scheme) means "act here": buttons, links, focus, the current
+   place. Text is a blue-black ink on white, the sidebar a cool mist, lines
+   light and quiet; red is for what's late or can't be undone. Dark mode
+   keeps the hues on a blue-black ground. Settings › Appearance's other
+   schemes, corners and fonts override these (lib/appearance.svelte.js). */
+:root {
+	--background: #ffffff;
+	--foreground: #1b1e2e;
+	--card: #ffffff;
+	--card-foreground: #1b1e2e;
+	--popover: #ffffff;
+	--popover-foreground: #1b1e2e;
+	--primary: #5d63cd;
+	--primary-foreground: #ffffff;
+	--secondary: #f0f1f7;
+	--secondary-foreground: #1b1e2e;
+	--muted: #f2f3f8;
+	--muted-foreground: #5b6175;
+	--accent: #eceefa;
+	--accent-foreground: #23286e;
+	--destructive: #c2362b;
+	--border: #e3e5ed;
+	--input: #d9dce6;
+	--ring: #5d63cd;
+	--chart-1: #5d63cd;
+	--chart-2: #2f8f5b;
+	--chart-3: #c47d12;
+	--chart-4: #8a4fc6;
+	--chart-5: #5b6175;
+	--radius: 0.625rem;
+	/* The app's own font, Manrope; Settings › Appearance may pick another. */
+	--app-font: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+	--sidebar: #f5f6fa;
+	--sidebar-foreground: #2a2e40;
+	--sidebar-primary: #5d63cd;
+	--sidebar-primary-foreground: #ffffff;
+	--sidebar-accent: #e8eaf6;
+	--sidebar-accent-foreground: #1b1e2e;
+	--sidebar-border: #e3e5ed;
+	--sidebar-ring: #5d63cd;
+}
+
+.dark {
+	--background: #12141c;
+	--foreground: #e8e9f0;
+	--card: #181b25;
+	--card-foreground: #e8e9f0;
+	--popover: #1c1f2b;
+	--popover-foreground: #e8e9f0;
+	--primary: #8b90f0;
+	--primary-foreground: #12141c;
+	--secondary: #232736;
+	--secondary-foreground: #e8e9f0;
+	--muted: #1f2230;
+	--muted-foreground: #a3a8bd;
+	--accent: #262a42;
+	--accent-foreground: #e8e9f0;
+	--destructive: #f07167;
+	--border: rgb(255 255 255 / 9%);
+	--input: rgb(255 255 255 / 14%);
+	--ring: #8b90f0;
+	--chart-1: #8b90f0;
+	--chart-2: #5cc48b;
+	--chart-3: #e3a63f;
+	--chart-4: #b48cf0;
+	--chart-5: #a3a8bd;
+	--sidebar: #151822;
+	--sidebar-foreground: #d5d7e2;
+	--sidebar-primary: #8b90f0;
+	--sidebar-primary-foreground: #12141c;
+	--sidebar-accent: #222638;
+	--sidebar-accent-foreground: #e8e9f0;
+	--sidebar-border: rgb(255 255 255 / 8%);
+	--sidebar-ring: #8b90f0;
+}
+
+@theme inline {
+	--font-sans: var(--app-font);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* The components in src/lib/components/ui come from shadcn-svelte's
+   registry, as they are; the app's own (src/lib/components) are built from
+   them and these tokens. */
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground text-sm antialiased;
+		min-block-size: 100dvh;
+		font-feature-settings: "tnum" 0;
+	}
+	/* Headings: the scale's steps (30 / 24 / 20 / 16), a touch tighter as
+	   they grow, in sentence case. */
+	h1, h2, h3 {
+		letter-spacing: -0.012em;
+		text-wrap: balance;
+	}
+	/* A row of tabs scrolls sideways on a narrow screen rather than
+	   widening the page. */
+	[data-slot="tabs-list"] {
+		max-inline-size: 100%;
+		overflow-x: auto;
+		justify-content: flex-start;
+		scrollbar-width: none;
+	}
+	/* Dates, counts and money line up in columns. */
+	td, time, .tabular-nums {
+		font-variant-numeric: tabular-nums;
+	}
+	/* Moving between screens (router.svelte.js): the browser's own view
+	   transition, a quick cross-fade once the new screen has its data. What
+	   doesn't change (the sidebar, the header) doesn't visibly move. */
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation-duration: 160ms;
+		animation-timing-function: ease-out;
+	}
+	/* The keyboard's cursor (lib/keys.svelte.js): the item j / k is on. */
+	[data-nav-current] {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+		border-radius: var(--radius-md);
+	}
+	tr[data-nav-current] {
+		outline-offset: -2px;
+		background: var(--muted);
+	}
+	/* Motion only answers what a person does; and not at all when they've
+	   asked for less. */
+	@media (prefers-reduced-motion: reduce) {
+		*, *::before, *::after {
+			animation-duration: 0.01ms !important;
+			animation-iteration-count: 1 !important;
+			transition-duration: 0.01ms !important;
+			scroll-behavior: auto !important;
+		}
+	}
+	html {
+		@apply font-sans;
+		overflow-x: clip;
+	}
+	/* A dialog or sheet freezes the page behind it (bits-ui sets the body's
+	   overflow); with html clipping sideways the body's overflow no longer
+	   reaches the window, so the window freezes here too. */
+	html:has(> body[style*="overflow: hidden"]) {
+		overflow: hidden;
+	}
+	button:not(:disabled), summary, [role="button"] {
+		cursor: pointer;
+	}
+	summary { list-style: none; }
+	summary::-webkit-details-marker { display: none; }
+	kbd {
+		@apply bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center rounded-sm border px-1 font-mono text-[0.7rem] font-medium select-none;
+	}
+}
+
+/* Rendered Markdown, in the editor's preview. */
+@layer components {
+	.prose-admin {
+		@apply text-foreground/90 leading-relaxed;
+		> * + * { margin-block-start: 0.75rem; }
+		:is(h1, h2, h3, h4) { @apply text-foreground font-semibold; }
+		h1 { @apply text-2xl; } h2 { @apply text-xl; } h3 { @apply text-base; }
+		a { @apply text-primary underline underline-offset-2; }
+		ul { @apply list-disc ps-5; }
+		ol { @apply list-decimal ps-5; }
+		code { @apply bg-muted rounded-sm px-1 py-0.5 text-[0.9em]; }
+		pre { @apply bg-muted overflow-x-auto rounded-lg border px-4 py-3 text-xs; }
+		blockquote { @apply text-muted-foreground border-s-[3px] ps-3; }
+	}
+}
+
+/* The rich-text editor (Tiptap, in MarkdownEditor): its placeholder, task
+   lists and selected nodes, on top of .prose-admin. */
+@layer components {
+	.tiptap {
+		h4 { @apply text-sm; }
+		hr { @apply my-4 border-t; }
+		hr.ProseMirror-selectednode { @apply border-ring; }
+		pre code { @apply bg-transparent p-0; }
+		p.is-editor-empty:first-child::before {
+			@apply text-muted-foreground pointer-events-none float-left h-0;
+			content: attr(data-placeholder);
+		}
+		ul[data-type="taskList"] {
+			@apply list-none ps-0;
+			li { @apply flex items-start gap-2; }
+			li > label { @apply mt-1 flex-none select-none; }
+			li > div { @apply flex-1; }
+			input[type="checkbox"] { @apply accent-primary size-3.5 cursor-pointer; }
+			ul[data-type="taskList"] { @apply my-0; }
+		}
+	}
+}
+
+/* A {{ merge tag }}, in a message and in its sidebar. */
+@layer components {
+	.merge-tag {
+		@apply bg-primary/10 text-foreground rounded-sm px-1.5 py-0.5 font-mono text-[0.85em];
+	}
+	button.merge-tag {
+		@apply font-sans text-xs;
+	}
+}
+
+/* An inactive tab reads as the muted text (shadcn draws it at 60% of the
+   text color, a shade under readable on the muted strip). Outside any
+   layer, so it wins over the component's utilities. */
+[data-slot="tabs-trigger"][data-state="inactive"] {
+	color: var(--muted-foreground);
+}
+[data-slot="tabs-trigger"][data-state="inactive"]:hover {
+	color: var(--foreground);
+}

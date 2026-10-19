@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Going live with Runwell</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --panel: #ffffff; --text: #1b1e2e; --muted: #5b6175; --line: #e3e5ed;
+    --accent: #5d63cd; --accent-soft: #eef0fb; --ok: #166534; --ok-soft: #dcfce7; --warn: #9a3412; --warn-soft: #ffedd5;
+    --code: #f5f5f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12141c; --panel: #1a1d28; --text: #f1f2f6; --muted: #a3a8bd; --line: #2a2e3d;
+      --accent: #8b90f0; --accent-soft: #1f2240; --ok: #86efac; --ok-soft: #052e16; --warn: #fdba74; --warn-soft: #431407;
+      --code: #292524;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 12px; }
+  h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+  p, li { color: var(--text); }
+  .lede { color: var(--muted); font-size: 1.1rem; margin: 0 0 24px; }
+  code, kbd { font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 6px; border-radius: 4px; }
+  pre { background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font: 0.88rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre code { background: none; padding: 0; }
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: step; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 16px 60px; margin: 0 0 12px; }
+  ol.steps > li::before { content: counter(step); position: absolute; left: 16px; top: 14px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; }
+  ol.steps > li > strong:first-child { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+  ol.steps ul { margin: 8px 0 0; padding-left: 20px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 8px 0; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .note { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 12px 14px; border-radius: 6px; margin: 16px 0; }
+  .warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .checklist { list-style: none; padding: 0; }
+  .checklist li::before { content: "☐ "; color: var(--accent); }
+  @media (max-width: 520px) { ol.steps > li { padding-left: 52px; } th, td { padding: 8px; font-size: 0.92rem; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Going live with Runwell</h1>
+  <p class="lede">From an empty server to a live Runwell on Hoster, with a Rails install brought over if you have one. One install per app; repeat for each business.</p>
+
+  <div class="note"><strong>The one rule:</strong> every install keeps everything (database, uploaded files, secret key) in its own volume at <code>/data</code>. The repository's <code>config/deploy.yml</code> sets that up, and Runwell refuses to start without it, so a deploy can't wipe an install.</div>
+
+  <h2>Before you start</h2>
+  <ul class="checklist">
+    <li>Hoster is connected to GitHub with access to <code>Martin-Business-Consultants/runwellgo</code>.</li>
+    <li>The server is set up in Hoster.</li>
+    <li>Runwell's domain (e.g. <code>crm.brem.io</code>) points at the server: a DNS A record to its IP.</li>
+    <li>Moving from the Rails core? A backup from its Settings › Export › <em>Make a backup</em> (a <code>.zip</code>).</li>
+  </ul>
+
+  <h2>Go live</h2>
+  <ol class="steps">
+    <li><strong>Create the app</strong>
+      In Hoster: <em>New app</em>, from the GitHub repository <code>Martin-Business-Consultants/runwellgo</code>, branch <code>main</code>.
+      <ul>
+        <li>Name it after the business, e.g. <code>brem</code>. The name becomes its volume: <code>brem-data</code>.</li>
+        <li>Every install needs a name of its own. Never reuse one.</li>
+      </ul>
+    </li>
+    <li><strong>Add the domain</strong>
+      <em>Domains › Add domain</em>: <code>crm.brem.io</code>. Hoster takes care of HTTPS.
+    </li>
+    <li><strong>Set the variables</strong>
+      Under <em>Variables</em>:
+      <table>
+        <tr><th>Name</th><th>Value</th><th></th></tr>
+        <tr><td><code>SITE_KEY</code></td><td><code>brem</code></td><td>Required. The install's name. It ties the volume to this install.</td></tr>
+        <tr><td><code>APP_URL</code></td><td><code>https://crm.brem.io</code></td><td>Optional. Settings › Address takes over once set.</td></tr>
+        <tr><td><code>SMTP_ADDRESS</code> …</td><td></td><td>Optional. Or set email up in Settings › Email.</td></tr>
+      </table>
+      Port 80, the <code>/up</code> health check, <code>TRUST_PROXY</code> and the volume come from the repository. Don't add them by hand.
+    </li>
+    <li><strong>Deploy</strong>
+      Press <em>Deploy</em>. When it's done, <em>Logs</em> shows <code>runwell is up</code>, and <em>Volumes</em> lists <code>brem-data</code> at <code>/data</code>.
+      <div class="note warn">If the log says the data directory isn't on a persistent volume, the volume didn't apply. Check that the app is deploying from <code>main</code> (the repository's <code>config/deploy.yml</code>) and deploy again. Nothing has been lost; Runwell stopped before writing anything.</div>
+    </li>
+    <li><strong>Make the first owner</strong>
+      Open <code>https://crm.brem.io</code>.
+      <ul>
+        <li><strong>Moving from Rails?</strong> Make a first owner on the sign-up screen (it's replaced in the next step), then carry on.</li>
+        <li><strong>Starting fresh?</strong> The account you make here is the owner. Skip step 6.</li>
+      </ul>
+    </li>
+    <li><strong>Bring the Rails install in</strong>
+      Settings › Import: upload the backup, read what it found, and import. Runwell restarts onto it, and everyone signs in with the passwords they had. Switch your plugins back on in Settings › Plugins (and paste the AI provider's key again in Settings › AI).
+    </li>
+    <li><strong>Turn on backups</strong>
+      In Hoster, <em>Backups</em>: set a backup schedule (nightly) for <code>brem-data</code>, then press <em>Back up now</em> once to see it work. Settings › Export also makes a backup any time.
+    </li>
+    <li><strong>Finish setting up</strong>
+      Home's <em>Get set up</em> list walks through the rest: Settings › Address (the address emails link to, and the time zone), Email, inviting the team.
+    </li>
+  </ol>
+
+  <h2>Working on it with AI agents</h2>
+  <p>On your own machine, with the same <code>runwell</code> program:</p>
+<pre><code>runwell login https://crm.brem.io     # approve it in the browser
+runwell briefing                     # what needs a person now
+runwell mcp setup                    # the line to add it to Claude Code, Codex, Cursor…</code></pre>
+  <p>Every install is an MCP server at <code>/mcp</code> too (and <code>/portal/mcp</code> for a client's own agent). Code work goes to a runner on a machine you control: <code>docs/runners.md</code>.</p>
+
+  <h2>Updating</h2>
+  <ol class="steps">
+    <li><strong>See what's new</strong> Settings › Updates says when a new version is out, with its notes (the GitHub release).</li>
+    <li><strong>Back up</strong> Hoster <em>Backups › Back up now</em> (the update takes its own too).</li>
+    <li><strong>Update</strong> Press <em>Update now</em> in Settings › Updates. It takes a backup into the install's own volume (<code>/data/backups/</code>), downloads the new version there (checked against the release's checksums), and restarts on it: a few seconds offline. The database updates itself on start. If the new version doesn't come up, Runwell goes back to the one before and says so.</li>
+  </ol>
+  <p>Each install updates on its own, from its own volume. Deploying a newer image from Hoster works too, and takes over from an update made with the button. To go back, deploy the previous version from Hoster; if a release's notes say it changed the database, restore the backup from <code>/data/backups/</code> (Settings › Import) instead.</p>
+
+  <h2>Making a release</h2>
+  <p>Releases are what Settings › Updates and <code>install.sh</code> offer. From a clean <code>main</code> with the app built (<code>make ui</code>, committed in <code>internal/admin/dist</code>):</p>
+<pre><code>echo 3.1.0 &gt; VERSION &amp;&amp; git commit -am "Release 3.1.0"
+git tag v3.1.0 &amp;&amp; git push origin main v3.1.0</code></pre>
+  <p>The <code>release</code> workflow tests, builds every platform's <code>runwell</code> and <code>runwell-runner</code> with <code>checksums.txt</code>, and publishes the GitHub release; installs see it within the hour. The repository must be public (or Settings › Updates can't read its releases).</p>
+
+  <h2>Several installs on one server</h2>
+  <table>
+    <tr><th>Each install gets its own</th><th>Example</th></tr>
+    <tr><td>App (and so volume)</td><td><code>brem</code> → <code>brem-data</code>, <code>acme</code> → <code>acme-data</code></td></tr>
+    <tr><td>Domain</td><td><code>crm.brem.io</code>, <code>crm.acme.com</code></td></tr>
+    <tr><td><code>SITE_KEY</code></td><td><code>brem</code>, <code>acme</code></td></tr>
+    <tr><td>Backup schedule</td><td>one per volume</td></tr>
+  </table>
+  <p>The first start records <code>SITE_KEY</code> in the install's volume. A container with a different <code>SITE_KEY</code> refuses that volume, so two installs can't end up sharing one database by mistake.</p>
+
+  <h2>If something goes wrong</h2>
+  <table>
+    <tr><th>You see</th><th>What to do</th></tr>
+    <tr><td>Deploy fails: target failed to become healthy</td><td>Open <em>Logs</em>. Runwell prints one line saying why it stopped. The usual ones are below.</td></tr>
+    <tr><td>the data directory isn't on a persistent volume</td><td>Deploy from <code>main</code> (it has <code>config/deploy.yml</code>) and check <em>Volumes</em>. For a throwaway trial only: <code>EPHEMERAL_DATA=1</code>.</td></tr>
+    <tr><td>the data directory belongs to another site</td><td>Two installs are pointed at one volume. Give each app its own name, or fix <code>SITE_KEY</code>.</td></tr>
+    <tr><td>Emailed links point at localhost</td><td>Set Settings › Address (or <code>APP_URL</code>).</td></tr>
+    <tr><td>Locked out</td><td>Hoster <em>Shell</em>: <code>runwell user password --email you@example.com --password -</code>, then type the new password.</td></tr>
+  </table>
+</main>
+</body>
+</html>

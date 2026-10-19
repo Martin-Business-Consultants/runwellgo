@@ -1,0 +1,16 @@
+# What the image's build doesn't need: data, builds, the admin's and the
+# integration's sources and node_modules (the admin is committed built, in
+# internal/admin/dist).
+.git
+data
+dist
+agent
+.agents
+.claude
+ui
+packages
+contracts
+docs
+**/node_modules
+coverage.out
+runwell

@@ -1,0 +1,6 @@
+/data/
+/dist/
+/runwell
+coverage.out
+/ui/node_modules/
+/runwell-runner
