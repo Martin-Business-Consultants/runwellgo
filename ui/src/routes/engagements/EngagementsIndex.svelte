@@ -45,6 +45,9 @@
 
   // engagement_amount: only with prices on and something agreed.
   const amount = (e) => (session.me.prices && e.agreed_amount_cents ? money(e.agreed_amount_cents) + (e.shape === "recurring" ? " / period" : "") : "");
+  // Its own price, apart from any agreement; blank for none.
+  const price = (e) => (session.me.prices && e.price_cents != null ? money(e.price_cents) : "");
+  const agreements = session.me.agreements !== false;
   const fieldText = (f, v) => (v == null || v === "" ? "" : f.kind === "money" ? money(v) : f.kind === "date" ? date(v) : f.kind === "boolean" ? (v ? "Yes" : "No") : String(v));
 
   function toggle(id, on) { selected = on ? [...selected, id] : selected.filter((x) => x !== id); }
@@ -57,15 +60,15 @@
     load();
   }
   async function bulkClose(outcome) {
-    if (!(await confirm({ title: `${outcome === "cancelled" ? "Cancel" : "Mark complete"}: ${selected.length} ${noun}?`, message: "Each leaves the open list; agreements and history stay, and each can be reopened. Ones already closed are skipped.", confirmLabel: outcome === "cancelled" ? "Cancel them" : "Mark complete" }))) return;
+    if (!(await confirm({ title: `${outcome === "cancelled" ? "Cancel" : "Mark complete"}: ${selected.length} ${noun}?`, message: `Each leaves the open list; ${agreements ? "agreements and history stay" : "its history stays"}, and each can be reopened. Ones already closed are skipped.`, confirmLabel: outcome === "cancelled" ? "Cancel them" : "Mark complete" }))) return;
     bulk(() => post("/bulk/engagements/closure", { ids: selected, outcome }));
   }
   async function bulkDelete() {
-    if (!(await confirm({ title: `Delete ${selected.length} ${noun}?`, message: "Only those never sent to the client are deleted; sent ones are skipped (close them instead).", confirmLabel: "Delete", destructive: true }))) return;
+    if (!(await confirm({ title: `Delete ${selected.length} ${noun}?`, message: agreements ? "Only those never sent to the client are deleted; sent ones are skipped (close them instead)." : "Their work and notes go with them; any once sent to the client are skipped (close them instead).", confirmLabel: "Delete", destructive: true }))) return;
     bulk(() => api("DELETE", "/bulk/engagements", { ids: selected }));
   }
   async function remove(e) {
-    if (!(await confirm({ title: `Delete ${e.ref}?`, message: "It was never sent, so its draft agreement, work and notes go with it.", confirmLabel: "Delete", destructive: true }))) return;
+    if (!(await confirm({ title: `Delete ${e.ref}?`, message: agreements ? "It was never sent, so its draft agreement, work and notes go with it." : "Its work and notes go with it.", confirmLabel: "Delete", destructive: true }))) return;
     try { await del(`/engagements/${e.ref}`); toast(`${e.ref} deleted.`); load(); } catch (err) { toastError(err); }
   }
 </script>
@@ -116,7 +119,8 @@
           <SortableHead key="title" label="Title" />
           <SortableHead key="client" label={session.term("client")} />
           <SortableHead key="type" label="Type" />
-          {#if session.me.prices}<Table.Head class="text-end">Agreed</Table.Head>{/if}
+          {#if session.me.prices}<SortableHead key="price" label="Price" class="text-end" />{/if}
+          {#if session.me.prices && agreements}<Table.Head class="text-end">Agreed</Table.Head>{/if}
           <Table.Head>State</Table.Head>
           {#each listed as f (f.id)}<Table.Head>{f.label}</Table.Head>{/each}
           <Table.Head class="w-10"><span class="sr-only">Actions</span></Table.Head>
@@ -130,7 +134,8 @@
             <Table.Cell><a href={`/engagements/${e.ref}`} class="hover:underline">{e.title}</a></Table.Cell>
             <Table.Cell><a href={`/clients/${e.client.id}`} class="text-muted-foreground hover:underline">{e.client.display_name}</a></Table.Cell>
             <Table.Cell class="text-muted-foreground">{e.type_name}</Table.Cell>
-            {#if session.me.prices}<Table.Cell class="text-end tabular-nums">{amount(e)}</Table.Cell>{/if}
+            {#if session.me.prices}<Table.Cell class="text-end tabular-nums">{price(e)}</Table.Cell>{/if}
+            {#if session.me.prices && agreements}<Table.Cell class="text-end tabular-nums">{amount(e)}</Table.Cell>{/if}
             <Table.Cell><StatusBadge status={e.closed ? e.close_outcome || "closed" : e.state} label={e.state_label} /></Table.Cell>
             {#each listed as f (f.id)}<Table.Cell class="text-muted-foreground">{fieldText(f, e.custom_fields[f.key])}</Table.Cell>{/each}
             <Table.Cell>
@@ -159,7 +164,8 @@
           </Card.Header>
           <Card.Footer class="text-muted-foreground mt-auto gap-3 text-sm">
             <span>{e.type_name}</span>
-            {#if amount(e)}<span class="tabular-nums">{amount(e)}</span>{/if}
+            {#if price(e)}<span class="tabular-nums">{price(e)}</span>{/if}
+            {#if agreements && amount(e)}<span class="tabular-nums">Agreed {amount(e)}</span>{/if}
           </Card.Footer>
         </Card.Root>
       </a>

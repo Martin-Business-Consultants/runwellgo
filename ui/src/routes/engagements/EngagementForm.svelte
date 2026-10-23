@@ -24,11 +24,13 @@
   const ref = params.ref;
   const editing = !!ref;
   const shapes = [{ value: "fixed", label: "Fixed scope" }, { value: "recurring", label: "Recurring" }];
-  let form = $state({ client_id: router.query.get("client_id") || "", label: router.query.get("label") || "work_order", shape: "fixed", title: "", description: "", estimate_notes: "", custom_fields: {} });
+  let form = $state({ client_id: router.query.get("client_id") || "", label: router.query.get("label") || "work_order", shape: "fixed", title: "", description: "", estimate_notes: "", price: "", custom_fields: {} });
   let clients = $state([]), engagement = $state(null), client = $state(null);
   let errors = $state({}), busy = $state(false), loaded = $state(!editing);
   const back = editing ? `/engagements/${ref}` : "/engagements";
   const engagements = session.term("engagement", 2);
+  // Agreements switched off (Settings › Plugins): no draft, it's underway.
+  const agreements = session.me.agreements !== false;
 
   // The labels on offer: the enabled ones, and the one it has.
   const labels = $derived(Object.entries(session.me.terms?.labels || {}).filter(([k, l]) => l.enabled || k === form.label).map(([k, l]) => ({ value: k, label: l.one })));
@@ -40,7 +42,7 @@
   if (editing) {
     get(`/engagements/${ref}`).then(({ engagement: e }) => {
       engagement = e;
-      form = { client_id: String(e.client.id), label: e.label, shape: e.shape, title: e.title, description: e.description_html || "", estimate_notes: e.estimate_notes_html || "", custom_fields: { ...e.custom_fields } };
+      form = { client_id: String(e.client.id), label: e.label, shape: e.shape, title: e.title, description: e.description_html || "", estimate_notes: e.estimate_notes_html || "", price: priceText(e.price_cents), custom_fields: { ...e.custom_fields } };
       page.set(`Edit ${ref}`, [{ label: engagements, href: "/engagements" }, { label: ref, href: back }]);
       loaded = true;
     }).catch(toastError);
@@ -52,12 +54,24 @@
     get(`/clients/${id}`).then((r) => { if (String(form.client_id) === String(id)) client = r.client; }).catch(() => (client = null));
   });
 
+  // The price is typed in dollars and kept as whole cents; blank is none,
+  // and what isn't a number goes as typed, for the server to say so.
+  const priceText = (cents) => (cents == null ? "" : (cents / 100).toFixed(2));
+  function priceCents(text) {
+    const t = String(text ?? "").replace(/[,$\s]/g, "");
+    if (t === "") return null;
+    const n = Number(t);
+    return isNaN(n) ? text : Math.round(n * 100);
+  }
+
   async function save(e) {
     e.preventDefault();
     busy = true; errors = {};
     try {
-      const { client_id, shape, ...changes } = form;
-      const res = editing ? await patch(`/engagements/${ref}`, { engagement: changes }) : await post("/engagements", { engagement: { ...form, client_id: Number(client_id) || null } });
+      const { client_id, shape, price, ...rest } = form;
+      // Prices off (Settings › Names), the price isn't shown, so it isn't sent.
+      const changes = session.me.prices ? { ...rest, price_cents: priceCents(price) } : rest;
+      const res = editing ? await patch(`/engagements/${ref}`, { engagement: changes }) : await post("/engagements", { engagement: { ...changes, shape, client_id: Number(client_id) || null } });
       toast(editing ? "Changes saved." : res.summary);
       go(`/engagements/${res.engagement.ref}`);
     } catch (err) { errors = err.errors; if (!Object.keys(errors).length) toastError(err); else focusInvalid(); }
@@ -71,7 +85,7 @@
     <Card.Header>
       <Card.Title class="text-xl"><h1>{editing ? `Edit ${ref}` : "New " + session.term("engagement").toLowerCase()}</h1></Card.Title>
       {#if !editing}
-        <Card.Description>{internal ? `${client.name} is internal: no agreement, add ${session.term("work").toLowerCase()} straight away.` : "Scope and price go on the agreement draft next."}</Card.Description>
+        <Card.Description>{internal ? `${client.name} is internal: no agreement, add ${session.term("work").toLowerCase()} straight away.` : agreements ? "Scope and price go on the agreement draft next." : `It’s underway once it’s saved: add ${session.term("work").toLowerCase()} next.`}</Card.Description>
       {/if}
     </Card.Header>
     <Card.Content>
@@ -120,12 +134,20 @@
             <TiptapEditor id="engagement-estimate" format="html" bind:value={form.estimate_notes} minHeight="min-h-20" />
             <Field.Description>Internal. Never shown to clients.</Field.Description>
           </Field.Field>
+          {#if session.me.prices}
+            <Field.Field data-invalid={!!errors.price_cents}>
+              <Field.Label for="engagement-price">Price</Field.Label>
+              <Input id="engagement-price" bind:value={form.price} inputmode="decimal" autocomplete="off" placeholder="0.00" class="tabular-nums sm:max-w-48" aria-invalid={!!errors.price_cents} />
+              {#if errors.price_cents}<Field.Error>Price {errors.price_cents[0]}</Field.Error>
+              {:else}<Field.Description>What it’s priced at, in dollars. Internal{agreements && !internal ? ": the client sees the agreement’s prices" : ""}. Leave it blank for none.</Field.Description>{/if}
+            </Field.Field>
+          {/if}
           <CustomFieldInputs model="Engagement" bind:values={form.custom_fields} />
         </Field.Group>
       {/if}
     </Card.Content>
     <Card.Footer class="gap-2">
-      <Button type="submit" disabled={busy || !loaded}>{editing ? "Save changes" : `Draft ${session.term("engagement").toLowerCase()}`}</Button>
+      <Button type="submit" disabled={busy || !loaded}>{editing ? "Save changes" : `${agreements && !internal ? "Draft" : "Start"} ${session.term("engagement").toLowerCase()}`}</Button>
       <Button href={back} variant="ghost">Cancel</Button>
     </Card.Footer>
   </Card.Root>
@@ -139,13 +161,13 @@
             <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt class="text-muted-foreground">Status</dt><dd><StatusBadge status={engagement.closed ? engagement.close_outcome || "closed" : engagement.state} label={engagement.state_label} /></dd>
               <dt class="text-muted-foreground">{session.term("client")}</dt><dd><a class="hover:underline" href={`/clients/${engagement.client.id}`}>{engagement.client.display_name}</a></dd>
-              {#if !engagement.internal}<dt class="text-muted-foreground">Versions</dt><dd>{engagement.agreement_versions.length}</dd>{/if}
+              {#if !engagement.internal && agreements}<dt class="text-muted-foreground">Versions</dt><dd>{engagement.agreement_versions.length}</dd>{/if}
               <dt class="text-muted-foreground">{session.term("work")}</dt><dd>{engagement.scope.total} ({engagement.scope.total - engagement.scope.done} open)</dd>
               {#if !engagement.internal && session.me.prices && engagement.agreed_amount_cents}
                 <dt class="text-muted-foreground">Agreed</dt><dd>{money(engagement.agreed_amount_cents)}{engagement.recurring ? " / period" : ""}</dd>
               {/if}
             </dl>
-            {#if !engagement.internal}<p class="text-muted-foreground text-xs">Scope and prices change on the agreement, not here: a sent version never changes.</p>{/if}
+            {#if !engagement.internal && agreements}<p class="text-muted-foreground text-xs">Scope and what the client pays change on the agreement, not here: a sent version never changes.</p>{/if}
           </Card.Content>
         </Card.Root>
       {/if}
@@ -154,7 +176,7 @@
         <Card.Header><Card.Title>How it goes</Card.Title></Card.Header>
         <Card.Content class="text-muted-foreground text-sm">
           <ol class="list-decimal space-y-1 ps-4">
-            {#if internal}
+            {#if internal || !agreements}
               <li>Add {session.term("work").toLowerCase()} as it comes up, with owners and due dates.</li>
               <li>Track it on the {session.term("work")} table or board like any other.</li>
               <li>Close the {session.term("engagement").toLowerCase()} when it’s done.</li>

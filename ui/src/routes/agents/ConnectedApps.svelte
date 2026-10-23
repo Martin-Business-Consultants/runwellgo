@@ -103,6 +103,7 @@
           <Card.Title>{session.term("client", 2)}’ AI</Card.Title>
           <Card.Description>A contact with portal access can connect their own assistant under Connected apps in the portal, or by giving it <code class="font-mono text-xs">{data.portal_mcp_url}</code>. It sees what they see and can send requests, as them.</Card.Description>
         </Card.Header>
+        {#if session.me.agreements !== false}
         <Card.Content>
           <Field.Field orientation="horizontal">
             <Field.Content>
@@ -112,6 +113,7 @@
             <Switch id="client-agent-approvals" checked={data.client_agent_approvals} onCheckedChange={setApprovals} />
           </Field.Field>
         </Card.Content>
+        {/if}
       </Card.Root>
     {/if}
 

@@ -114,6 +114,7 @@
           </Card.Root>
         {/if}
 
+        {#if portal.me?.agreements !== false}
         <Card.Root>
           <Card.Header><Card.Title>Scope in force</Card.Title></Card.Header>
           <Card.Content>
@@ -155,6 +156,7 @@
             {/each}
           </Card.Content>
         </Card.Root>
+        {/if}
       </div>
 
       <div class="flex flex-col gap-4">

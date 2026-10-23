@@ -29,8 +29,10 @@
     <Field.Content><Field.Label for="contact-portal">Portal access</Field.Label><Field.Description>Signs in by an emailed link and sees this {session.term("client").toLowerCase()}’s shared work and documents.</Field.Description></Field.Content>
     <Switch id="contact-portal" bind:checked={form.portal_access} />
   </Field.Field>
+  {#if session.me.agreements !== false}
   <Field.Field orientation="horizontal">
     <Field.Content><Field.Label for="contact-approve">Can approve</Field.Label><Field.Description>Agreements go to them to approve or ask for changes.</Field.Description></Field.Content>
     <Switch id="contact-approve" bind:checked={form.can_approve} />
   </Field.Field>
+  {/if}
 </Field.Group>

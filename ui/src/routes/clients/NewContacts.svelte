@@ -12,6 +12,7 @@
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import ContactFields from "./ContactFields.svelte";
 
+  import { session } from "$lib/session.svelte.js";
   let { contacts = $bindable([]), errors = {} } = $props();
   let open = $state(false), index = $state(-1), form = $state({}), problems = $state({});
 
@@ -56,7 +57,7 @@
   </Card.Header>
   <Card.Content>
     {#if !contacts.length}
-      <p class="text-muted-foreground text-sm">None yet. Add one who can approve agreements.</p>
+      <p class="text-muted-foreground text-sm">None yet.{session.me.agreements !== false ? " Add one who can approve agreements." : ""}</p>
     {:else}
       <ul class="flex flex-col gap-1">
         {#each contacts as c, i (i)}

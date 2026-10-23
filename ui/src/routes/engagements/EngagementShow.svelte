@@ -38,15 +38,15 @@
   let e = $state(null);
   let closing = $state(null), reason = $state(""), erasing = $state(false), confirmRef = $state(""), busy = $state(false);
 
-  // The Agreement tab (none for an internal project: no agreement), what
-  // other areas add, then History.
+  // The Agreement tab (none for an internal project, or with agreements
+  // switched off), what other areas add, then History.
   const tabs = $derived(e ? [
-    ...(e.internal ? [] : [{ key: "agreement", label: () => "Agreement", count: (r) => r.agreement_versions.length, component: AgreementTab }]),
+    ...(e.internal || !e.agreements ? [] : [{ key: "agreement", label: () => "Agreement", count: (r) => r.agreement_versions.length, component: AgreementTab }]),
     ...tabsFor("Engagement"),
     { key: "history", label: () => "History", component: null },
   ] : []);
   // Work first once something's agreed (or it's internal), else the agreement.
-  const fallback = $derived(e && (e.agreed_items.length || e.internal) && tabs.some((t) => t.key === "work") ? "work" : tabs[0]?.key);
+  const fallback = $derived(e && (e.agreed_items.length || e.internal || !e.agreements) && tabs.some((t) => t.key === "work") ? "work" : tabs[0]?.key);
   const tab = $derived(tabs.some((t) => t.key === router.query.get("tab")) ? router.query.get("tab") : fallback);
 
   async function load() {
@@ -76,7 +76,8 @@
   async function remove() {
     try { await del(`/engagements/${e.ref}`); toast(`${e.ref} deleted.`); go("/engagements"); } catch (err) { toastError(err); }
   }
-  const amount = $derived(e && !e.internal && session.me.prices && e.agreed_amount_cents ? money(e.agreed_amount_cents) : "");
+  const amount = $derived(e && !e.internal && e.agreements && session.me.prices && e.agreed_amount_cents ? money(e.agreed_amount_cents) : "");
+  const price = $derived(e && session.me.prices && e.price_cents != null ? money(e.price_cents) : "");
 </script>
 
 {#snippet HistoryTab({ record })}
@@ -115,7 +116,8 @@
       <StatusBadge status={e.closed ? e.close_outcome || "closed" : e.state} label={e.state_label} />
       <a class="text-foreground underline-offset-4 hover:underline" href={`/clients/${e.client.id}`}>{e.client.display_name}</a>
       <span>{e.type_name} · {e.recurring ? "Recurring" : "Fixed scope"}</span>
-      {#if amount}<span>Agreed <strong class="text-foreground">{amount}</strong>{e.recurring ? " / period" : ""}</span>{/if}
+      {#if price}<span>Price <strong class="text-foreground tabular-nums">{price}</strong></span>{/if}
+      {#if amount}<span>Agreed <strong class="text-foreground tabular-nums">{amount}</strong>{e.recurring ? " / period" : ""}</span>{/if}
       {#if e.closed}<span>{e.state_label} {date(e.closed_at)}{e.close_reason ? `: ${e.close_reason}` : ""}</span>{/if}
     </p>
     {#if e.next_step}
@@ -157,6 +159,7 @@
             <dt class="text-muted-foreground">Status</dt><dd><StatusBadge status={e.closed ? e.close_outcome || "closed" : e.state} label={e.state_label} /></dd>
             <dt class="text-muted-foreground">{session.term("client")}</dt><dd><a class="hover:underline" href={`/clients/${e.client.id}`}>{e.client.display_name}</a></dd>
             <dt class="text-muted-foreground">Type</dt><dd>{e.type_name} · {e.recurring ? "Recurring" : "Fixed scope"}</dd>
+            {#if session.me.prices}<dt class="text-muted-foreground">Price</dt><dd class="tabular-nums">{#if price}<strong>{price}</strong>{:else}<a class="text-muted-foreground hover:underline" href={`/engagements/${e.ref}/edit`}>None set</a>{/if}</dd>{/if}
             {#if amount}<dt class="text-muted-foreground">Agreed</dt><dd><strong>{amount}</strong>{e.recurring ? " / period" : ""}</dd>{/if}
             <dt class="text-muted-foreground">Started</dt><dd>{date(e.created_at)}</dd>
             {#if e.closed}<dt class="text-muted-foreground">{e.state_label}</dt><dd>{date(e.closed_at)}{e.close_reason ? `: ${e.close_reason}` : ""}</dd>{/if}
@@ -172,7 +175,7 @@
       <form onsubmit={close} class="flex flex-col gap-4">
         <Dialog.Header>
           <Dialog.Title>{closing === "cancelled" ? `Cancel ${e.ref}?` : `Mark ${e.ref} complete?`}</Dialog.Title>
-          <Dialog.Description>{closing === "cancelled" ? "Stopped before it was delivered." : "Delivered and done."} It leaves the open list; the agreement and its history stay, and it can be reopened.</Dialog.Description>
+          <Dialog.Description>{closing === "cancelled" ? "Stopped before it was delivered." : "Delivered and done."} It leaves the open list; {e.agreements ? "the agreement and its history stay" : "its history stays"}, and it can be reopened.</Dialog.Description>
         </Dialog.Header>
         <Field.Field>
           <Field.Label for="close-reason" class="sr-only">A note</Field.Label>

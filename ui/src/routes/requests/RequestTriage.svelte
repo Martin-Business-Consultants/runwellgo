@@ -36,11 +36,14 @@
   const unmatched = $derived(!request.client_id);
   const labelOf = (list, v, fallback) => list.find((o) => o.value === v)?.label || fallback;
 
+  // With agreements off there's no agreement to add it to, and a new one
+  // starts underway rather than as a draft.
+  const agreements = session.me.agreements !== false;
   const choices = $derived([
     { value: "todo", title: `Do it as ${workWord}`, text: `Your team does it, as ${workWord} on ${anEngagement}.` },
     { value: "commitment", title: "Promise it by a date", text: "Track a promise, yours or the client’s, without making work." },
-    { value: "change", title: "Add it to an agreement", text: "A scope item the client approves, with its price." },
-    { value: "engagement", title: `Start a new ${engagementWord}`, text: "A draft agreement, with this as its first item." },
+    ...(agreements ? [{ value: "change", title: "Add it to an agreement", text: "A scope item the client approves, with its price." }] : []),
+    { value: "engagement", title: `Start a new ${engagementWord}`, text: agreements ? "A draft agreement, with this as its first item." : "Underway from the start; add its work next." },
     { value: "dismiss", title: "Dismiss", text: "Close it with a reason. Nothing is made." },
   ]);
 

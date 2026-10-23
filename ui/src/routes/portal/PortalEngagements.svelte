@@ -23,10 +23,10 @@
   {#if !engagements}
     <Skeleton class="h-40" />
   {:else if !engagements.length}
-    <EmptyState icon="document" title="No agreements yet." />
+    <EmptyState icon="document" title={portal.me?.agreements === false ? `No ${portal.term("engagement", 2).toLowerCase()} yet.` : "No agreements yet."} />
   {:else}
     <Card.Root>
-      <Card.Header><Card.Description>Everything we have agreed with you, and where each one stands.</Card.Description></Card.Header>
+      <Card.Header><Card.Description>{portal.me?.agreements === false ? "Everything we are doing for you, and where each one stands." : "Everything we have agreed with you, and where each one stands."}</Card.Description></Card.Header>
       <Card.Content>
         <ul class="divide-y">
           {#each engagements as e (e.ref)}
