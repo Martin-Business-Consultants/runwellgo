@@ -25,7 +25,7 @@ func (a *App) connectedAppRoutes(mux *http.ServeMux) {
 	a.handle(mux, "DELETE /api/settings/connected_apps/{id}", a.deleteConnectedApp)
 	a.handle(mux, "POST /api/settings/connected_apps/{id}/pause", a.pauseConnectedApp)
 	a.handle(mux, "DELETE /api/settings/connected_apps/{id}/pause", a.resumeConnectedApp)
-	a.handle(mux, "PATCH /api/settings/client_agent_approvals", a.updateClientAgentApprovals, need("manage_settings"))
+	a.handle(mux, "PATCH /api/settings/client_agent_approvals", a.updateClientAgentApprovals, need("manage_settings"), agreementRoute)
 
 	a.handle(mux, "GET /api/portal/connected_apps", a.listPortalConnectedApps, portal)
 	a.handle(mux, "POST /api/portal/connected_apps", a.createPortalConnectedApp, portal)

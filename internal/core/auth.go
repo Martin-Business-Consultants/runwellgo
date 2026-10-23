@@ -203,6 +203,7 @@ type route struct {
 	portal bool      // a client's contact, not staff
 	perm   string    // a permission the staff actor must hold
 	tool   *toolSpec // the agent tool this route is (agent.go)
+	plugin string    // a default plugin the route is part of: off, it isn't there
 }
 
 // open is a route anyone may call: sign-in, an approval link, setup.
@@ -211,6 +212,11 @@ func open(r *route) { r.auth = false }
 // portal is a route for a client's contact (the portal and its MCP), not
 // staff.
 func portal(r *route) { r.portal = true }
+
+// partOf is a route of a core feature a default plugin switches
+// (agreements): while it's off the route answers 404 and its tool isn't
+// offered.
+func partOf(key string) func(*route) { return func(r *route) { r.plugin = key } }
 
 // need is a route that also needs a permission (manage_settings, …).
 func need(permission string) func(*route) { return func(r *route) { r.perm = permission } }

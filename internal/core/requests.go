@@ -65,7 +65,7 @@ func (a *App) requestRoutes(mux *http.ServeMux) {
 			bodyParam("label", "string", "project, work_order or service.", false),
 			bodyParam("title", "string", "The engagement's title; the request's subject when blank.", false),
 			bodyParam("client_id", "integer", "The client, when the request has none.", false)))
-	a.handle(mux, "POST /api/requests/{id}/promote_change", a.promoteRequestChange, need("triage_requests"),
+	a.handle(mux, "POST /api/requests/{id}/promote_change", a.promoteRequestChange, need("triage_requests"), agreementRoute,
 		tool("promote_request_to_change", "Triage: add a request as a scope item on a draft",
 			bodyParam("engagement_ref", "string", "The engagement, like WO-12.", true),
 			bodyParam("price_cents", "integer", "The item's price in cents.", false)))
@@ -391,11 +391,11 @@ func (a *App) showRequest(c *Ctx) error {
 	}
 	c.Summary = q.Subject + " (" + q.Status + ")"
 	if q.Open() {
-		c.Crumbs = []Crumb{
-			step("Make it work on an engagement", "promote_request_to_todo", "id", id),
-			step("Add it to a draft as scope", "promote_request_to_change", "id", id),
-			step("Dismiss it", "dismiss_request", "id", id),
+		c.Crumbs = []Crumb{step("Make it work on an engagement", "promote_request_to_todo", "id", id)}
+		if a.agreementsOn(ctx) {
+			c.Crumbs = append(c.Crumbs, step("Add it to a draft as scope", "promote_request_to_change", "id", id))
 		}
+		c.Crumbs = append(c.Crumbs, step("Dismiss it", "dismiss_request", "id", id))
 	}
 	return c.JSON(200, O("summary", c.Summary, "request", o))
 }

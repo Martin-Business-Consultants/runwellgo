@@ -19,6 +19,7 @@ import (
 	"github.com/Martin-Business-Consultants/runwellgo/internal/mail"
 	"github.com/Martin-Business-Consultants/runwellgo/internal/secret"
 	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/plugins/agreements"
 )
 
 // Agreement versions: exactly what the client saw. A version is a draft
@@ -28,6 +29,22 @@ import (
 
 func init() { routeSets = append(routeSets, (*App).agreementRoutes) }
 
+// Agreements are switched by a default plugin (plugins/agreements): off,
+// their routes answer 404, their tools aren't offered, engagements are
+// underway from the start (State) and nothing shows them; the rows stay.
+
+// agreementRoute marks a route that's part of agreements.
+var agreementRoute = partOf(agreements.Key)
+
+// agreementsOn is whether agreements are on.
+func (a *App) agreementsOn(ctx context.Context) bool { return a.plugins.DefaultOn(ctx, agreements.Key) }
+
+// pluginOff is what a route of a switched-off default plugin answers.
+func pluginOff(key string) error {
+	name := humanize(key)
+	return apierr.NotFound(name + " are off here: an owner switches them on in Settings › Plugins.")
+}
+
 // AgreementKinds and cadences, as the Rails model has them.
 var (
 	AgreementKinds    = []string{"initial", "change_order", "revision", "add_on"}
@@ -36,24 +53,24 @@ var (
 )
 
 func (a *App) agreementRoutes(mux *http.ServeMux) {
-	a.handle(mux, "POST /api/engagements/{ref}/agreement_versions", a.createAgreementVersion, tool("create_agreement_version", "Start a draft agreement version",
+	a.handle(mux, "POST /api/engagements/{ref}/agreement_versions", a.createAgreementVersion, agreementRoute, tool("create_agreement_version", "Start a draft agreement version",
 		note("A new draft on an engagement: the initial agreement, a change order, a revision or an add-on. Add scope with add_scope_item, then send_agreement."),
 		bodyParam("kind", "string", strings.Join(AgreementKinds, ", ")+".", false),
 		bodyParam("summary", "string", "What this version covers.", false),
 		bodyParam("reason", "string", "Why it's changing.", false),
 		next("add_scope_item", "send_agreement")))
-	a.handle(mux, "PATCH /api/agreement_versions/{id}", a.updateAgreementVersion, tool("update_agreement_version", "Change a draft agreement version",
+	a.handle(mux, "PATCH /api/agreement_versions/{id}", a.updateAgreementVersion, agreementRoute, tool("update_agreement_version", "Change a draft agreement version",
 		body("agreement_version", `{summary, reason, cadence: weekly|monthly|quarterly, amount_cents: integer}`, true)))
-	a.handle(mux, "DELETE /api/agreement_versions/{id}", a.discardDraft, tool("discard_draft", "Discard a draft agreement version",
+	a.handle(mux, "DELETE /api/agreement_versions/{id}", a.discardDraft, agreementRoute, tool("discard_draft", "Discard a draft agreement version",
 		note("Only drafts: a sent version is frozen forever.")))
-	a.handle(mux, "POST /api/agreement_versions/{id}/send_out", a.sendAgreement, need("send_agreements"), tool("send_agreement", "Send an agreement version to the client",
+	a.handle(mux, "POST /api/agreement_versions/{id}/send_out", a.sendAgreement, agreementRoute, need("send_agreements"), tool("send_agreement", "Send an agreement version to the client",
 		note("Freezes the draft (snapshotted and hashed; it can never change again). With contact_id, emails that contact a signed approval link; without, mark it sent and record their decision later with record_decision."),
 		bodyParam("contact_id", "integer", "The contact to email an approval link.", false),
 		confirm("It freezes this version for good and, with a contact, emails them an approval link.")))
-	a.handle(mux, "POST /api/agreement_versions/{id}/issue_link", a.issueApprovalLink, need("send_agreements"), tool("email_approval_link", "Email an approval link",
+	a.handle(mux, "POST /api/agreement_versions/{id}/issue_link", a.issueApprovalLink, agreementRoute, need("send_agreements"), tool("email_approval_link", "Email an approval link",
 		bodyParam("contact_id", "integer", "The contact to email.", true),
 		confirm("It emails the contact a signed link to approve or ask for changes.")))
-	a.handle(mux, "POST /api/agreement_versions/{id}/record_decision", a.recordDecision, need("send_agreements"), tool("record_decision", "Record the client’s decision",
+	a.handle(mux, "POST /api/agreement_versions/{id}/record_decision", a.recordDecision, agreementRoute, need("send_agreements"), tool("record_decision", "Record the client’s decision",
 		note("For a decision that came by email, call or meeting. Say where it came from: the evidence is kept with the approval. Approving creates the work (one todo per scope item)."),
 		bodyParam("decision", "string", "approved or changes_requested.", true),
 		bodyParam("contact_id", "integer", "The contact who decided.", false),

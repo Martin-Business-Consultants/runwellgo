@@ -35,6 +35,12 @@ func (a *App) availableTo(t *toolSpec, role string) bool {
 	return !t.portalTool() && (t.perm() == "" || a.can(role, t.perm()))
 }
 
+// toolOff is whether the tool's route is part of a default plugin that's
+// off (agreements): nobody is offered it.
+func (a *App) toolOff(t *toolSpec) bool {
+	return t.rt != nil && t.rt.plugin != "" && !a.plugins.DefaultOn(a.ctx, t.rt.plugin)
+}
+
 // toolsFor is the catalogue for whoever is asking: a person on staff (or
 // their agent) gets the staff tools their role allows, a client's contact
 // the portal's; a read-only connection only the tools that look.
@@ -43,7 +49,7 @@ func (a *App) toolsFor(actor *Actor) []*toolSpec {
 	var out []*toolSpec
 	for _, t := range a.catalogue() {
 		switch {
-		case actor == nil:
+		case actor == nil, a.toolOff(t):
 			continue
 		case actor.Contact != nil:
 			if !t.portalTool() || t == apiRequestTool {
@@ -72,7 +78,14 @@ func (a *App) withheldTools(actor *Actor) []Obj {
 		return out
 	}
 	for _, t := range a.tools {
-		if t.portalTool() || a.availableTo(t, actor.User.Person().Role) {
+		if t.portalTool() {
+			continue
+		}
+		if a.toolOff(t) {
+			out = append(out, O("name", t.Name, "why", "the "+t.rt.plugin+" plugin is off"))
+			continue
+		}
+		if a.availableTo(t, actor.User.Person().Role) {
 			continue
 		}
 		why := "needs " + t.perm()

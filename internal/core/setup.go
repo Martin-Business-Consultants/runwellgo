@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
@@ -55,7 +56,7 @@ func (a *App) setupSteps(ctx context.Context) ([]setupStep, error) {
 	people, _ := store.Count(ctx, a.store, `SELECT count(*) FROM users WHERE deactivated_at IS NULL AND agent_owner_id IS NULL`)
 	sent := s.TestEmail["sent_at"]
 
-	return []setupStep{
+	steps := []setupStep{
 		{"address", "Set Runwell’s address", "Where your team and " + clients + " open it. Every link Runwell emails points there.", "/settings/address",
 			s.AppHost != "" || a.cfg.BaseURL != "" || os.Getenv("APP_HOST") != "", false},
 		{"time_zone", "Choose your time zone", "Times on your pages and in emails show in it.", "/settings/address#time_zone",
@@ -76,7 +77,17 @@ func (a *App) setupSteps(ctx context.Context) ([]setupStep, error) {
 			exists(`SELECT count(*) FROM agreement_versions WHERE sent_at IS NOT NULL`), false},
 		{"requests_by_email", "Take requests by email", s.Term("client", 2) + " email an address and each message becomes a request to triage.", "/settings/email#requests_by_email",
 			s.RequestsEmail != "" && ingress != "", true},
-	}, nil
+	}
+	if !a.agreementsOn(ctx) {
+		// Agreements off: nobody approves anything, nothing is sent.
+		steps = slices.DeleteFunc(steps, func(st setupStep) bool { return st.Key == "approver" || st.Key == "send" })
+		for i := range steps {
+			if steps[i].Key == "engagement" {
+				steps[i].Title, steps[i].Text = "Start your first "+strings.ToLower(s.Term("engagement", 1)), "What you're doing for them, and its price."
+			}
+		}
+	}
+	return steps, nil
 }
 
 // setupJSON is the checklist for home, or nil when it isn't shown: only to

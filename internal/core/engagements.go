@@ -84,6 +84,9 @@ var (
 	EngagementCloseOutcomes = []string{"completed", "cancelled"}
 )
 
+// agreementFilters are the filters that are an agreement's state.
+var agreementFilters = map[string]bool{"draft": true, "sent": true, "changes_requested": true}
+
 // engagementFilterLabels are the filter's words (Engagement.filter_options).
 var engagementFilterLabels = map[string]string{
 	"approved": "Active", "open": "All open", "draft": "Draft", "sent": "Sent",
@@ -141,6 +144,9 @@ type Engagement struct {
 	ClientInternal bool
 	ClientTimeZone string
 	Versions       []*AgreementVersion // by number
+	// NoAgreements is set while agreements are off: the versions are
+	// still read (what was sent stays sent) but don't make the state.
+	NoAgreements bool
 }
 
 const engagementSelect = `SELECT e.id, e.client_id, e.ref, e.label, e.shape, e.title, COALESCE(e.description, ''), COALESCE(e.estimate_notes, ''),
@@ -176,8 +182,9 @@ func (a *App) loadEngagements(ctx context.Context, db store.Querier, where strin
 	if err != nil {
 		return nil, err
 	}
+	off := !a.agreementsOn(ctx)
 	for _, e := range list {
-		e.Versions = versions[e.ID]
+		e.Versions, e.NoAgreements = versions[e.ID], off
 	}
 	return list, nil
 }
@@ -248,13 +255,17 @@ func (e *Engagement) PendingVersion() *AgreementVersion {
 }
 
 // State is derived: closed, internal, draft, sent, changes_requested or
-// approved, in that order of precedence.
+// approved, in that order of precedence. With agreements off there's
+// nothing to agree, so an open engagement is underway (approved).
 func (e *Engagement) State() string {
 	if e.Closed() {
 		return "closed"
 	}
 	if e.Internal() {
 		return "internal"
+	}
+	if e.NoAgreements {
+		return "approved"
 	}
 	if len(e.Versions) == 0 {
 		return "draft"
@@ -275,6 +286,9 @@ func (e *Engagement) State() string {
 func (e *Engagement) StateLabel() string {
 	if e.Closed() {
 		return humanize(strOr(e.CloseOutcome, "closed"))
+	}
+	if e.NoAgreements && !e.Internal() {
+		return "Active"
 	}
 	return humanize(e.State())
 }
@@ -463,9 +477,14 @@ func (a *App) listEngagements(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	filters := make([]Obj, len(EngagementFilters))
-	for i, f := range EngagementFilters {
-		filters[i] = O("value", f, "label", engagementFilterLabels[f], "count", counts[f])
+	filters := []Obj{}
+	off := !a.agreementsOn(ctx)
+	for _, f := range EngagementFilters {
+		// With agreements off nothing is a draft, sent or sent back.
+		if off && agreementFilters[f] && f != state {
+			continue
+		}
+		filters = append(filters, O("value", f, "label", engagementFilterLabels[f], "count", counts[f]))
 	}
 	labels := []Obj{O("value", "all", "label", "All types")}
 	for _, l := range Labels {
@@ -501,7 +520,7 @@ func engagementCrumbs(e *Engagement) []Crumb {
 	switch {
 	case e.Closed():
 		return []Crumb{step("Reopen it", "reopen_engagement", "ref", e.Ref)}
-	case e.Internal():
+	case e.Internal(), e.NoAgreements:
 		return []Crumb{step("Add work", "create_work", "ref", e.Ref)}
 	case e.DraftVersion() != nil:
 		d := e.DraftVersion()
@@ -529,9 +548,11 @@ func (a *App) engagementShowJSON(ctx context.Context, e *Engagement) (Obj, error
 	if err != nil {
 		return nil, err
 	}
-	versions, err := a.versionsJSON(ctx, e, e.Versions)
-	if err != nil {
-		return nil, err
+	versions := []Obj{}
+	if !e.NoAgreements {
+		if versions, err = a.versionsJSON(ctx, e, e.Versions); err != nil {
+			return nil, err
+		}
 	}
 	o := a.engagementJSON(e, custom[e.ID], s).
 		Set("description", nullable(agentText(e.Description))).
@@ -570,12 +591,17 @@ func (a *App) engagementShowJSON(ctx context.Context, e *Engagement) (Obj, error
 		Set("agreed_items", agreed).
 		Set("scope", scope).
 		Set("new_version_kinds", newVersionKinds(e)).
+		Set("agreements", !e.NoAgreements).
 		Set("client_contacts", contacts), nil
 }
 
-// agreedItems are the scope in force: every item of every approved version.
+// agreedItems are the scope in force: every item of every approved version
+// (none while agreements are off).
 func (e *Engagement) agreedItems() []*ScopeItem {
 	var out []*ScopeItem
+	if e.NoAgreements {
+		return out
+	}
 	for _, v := range e.Versions {
 		if v.Approved() {
 			out = append(out, v.Items...)
@@ -745,13 +771,16 @@ func (a *App) engagementNextStep(ctx context.Context, e *Engagement, s *Settings
 		if open == 0 && done > 0 && !e.Recurring() {
 			finish = " Everything’s done: mark it complete in Details."
 		}
-		if e.State() == "internal" {
+		if e.State() == "internal" || e.NoAgreements {
 			w := fmt.Sprintf("%d open, %d done", open, done)
 			switch {
 			case done+open == 0:
 				w = "nothing yet, so add it below"
 			case open == 0:
 				w = "all done"
+			}
+			if e.NoAgreements && !e.Internal() {
+				return nextStep{Text: work + ": " + w + "." + finish}, nil
 			}
 			return nextStep{Text: "Internal: no agreement to send. " + work + ": " + w + "." + finish}, nil
 		}
@@ -877,8 +906,9 @@ func (t *Tx) insertEngagement(fields, custom map[string]any) (id int64, ref stri
 	if err := t.recordMentions("Engagement", id, str(fields["description"])+" "+str(fields["estimate_notes"])); err != nil {
 		return 0, "", false, err
 	}
-	if internal {
-		return id, ref, true, nil
+	// With agreements off there's no draft to start: it's underway.
+	if internal || !t.App.agreementsOn(t.Ctx) {
+		return id, ref, internal, nil
 	}
 	e, err := t.App.engagementByID(t.Ctx, t, id)
 	if err != nil {
@@ -924,9 +954,12 @@ func (a *App) createEngagement(c *Ctx) error {
 	if err != nil {
 		return err
 	}
-	if internal {
+	switch {
+	case internal:
 		c.Summary = ref + " started. It's internal: add work as it comes up."
-	} else {
+	case e.NoAgreements:
+		c.Summary = ref + " started."
+	default:
 		c.Summary = ref + " drafted."
 	}
 	c.Crumbs = engagementCrumbs(e)

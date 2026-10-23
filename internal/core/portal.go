@@ -37,7 +37,7 @@ func (a *App) portalRoutes(mux *http.ServeMux) {
 	a.handle(mux, "GET /api/portal/engagements/{ref}", a.showPortalEngagement, portal, tool("portal_engagement", "One engagement: what was agreed, the work, and anything awaiting you",
 		note("Give its ref (WO-12) or title. The scope in force, the agreement waiting for your decision (exactly as it was sent), past agreements and decisions, the work shared with you, and its documents."),
 		next("portal_decide", "portal_send_request")))
-	a.handle(mux, "POST /api/portal/engagements/{engagement_ref}/approvals", a.createPortalApproval, portal, tool("portal_decide", "Decide on the agreement awaiting you",
+	a.handle(mux, "POST /api/portal/engagements/{engagement_ref}/approvals", a.createPortalApproval, portal, agreementRoute, tool("portal_decide", "Decide on the agreement awaiting you",
 		note("Approve, or ask for changes to, the agreement portal_engagement shows as awaiting your decision. Only a contact who can approve may; approver_name is the person's own typed name, which is recorded with the time and that their agent did it. Show them the agreement first."),
 		bodyParam("decision", "string", "approved or changes_requested.", true),
 		bodyParam("approver_name", "string", "The person's own typed name.", true),
@@ -222,7 +222,7 @@ func (a *App) showPortalMe(c *Ctx) error {
 		"business", a.BrandName(ctx), "awaiting_decision", pending, "read_only", readOnly)
 	// What the portal's screens need besides: the zone to show times in,
 	// the install's words, and the session's CSRF token.
-	out = out.Set("time_zone_iana", location(zone).String()).Set("terms", s.TermsJSON()).Set("prices", s.Prices)
+	out = out.Set("time_zone_iana", location(zone).String()).Set("terms", s.TermsJSON()).Set("prices", s.Prices).Set("agreements", a.agreementsOn(ctx))
 	if c.Actor.Session != nil {
 		out = out.Set("csrf", c.Actor.Session.CSRF)
 	}
@@ -283,6 +283,7 @@ type portalEngagement struct {
 	Internal                              bool
 	CreatedAt                             store.Time
 	Versions                              []*portalVersion
+	NoAgreements                          bool // agreements are off: none read, it's underway
 }
 
 func (e *portalEngagement) pending() *portalVersion {
@@ -301,6 +302,8 @@ func (e *portalEngagement) state() string {
 		return "closed"
 	case e.Internal:
 		return "internal"
+	case e.NoAgreements:
+		return "approved"
 	}
 	if len(e.Versions) == 0 {
 		return "draft"
@@ -320,6 +323,9 @@ func (e *portalEngagement) state() string {
 func (e *portalEngagement) stateLabel() string {
 	if e.ClosedAt.Valid {
 		return humanize(strOr(e.CloseOutcome, "closed"))
+	}
+	if e.NoAgreements && !e.Internal {
+		return "Active"
 	}
 	return humanize(e.state())
 }
@@ -382,6 +388,13 @@ func (a *App) portalEngagements(ctx context.Context, clientID int64, ref string)
 	})
 	if err != nil || len(list) == 0 {
 		return list, err
+	}
+	// Agreements off: the client sees none, and nothing awaits them.
+	if !a.agreementsOn(ctx) {
+		for _, e := range list {
+			e.NoAgreements = true
+		}
+		return list, nil
 	}
 	byID := map[int64]*portalEngagement{}
 	ids := make([]int64, len(list))

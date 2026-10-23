@@ -69,3 +69,19 @@ func (h *Host) forgetDefault(ctx context.Context, key string) error {
 	state[key] = map[string]any{"removed": true}
 	return h.env.ReplaceSetting(ctx, "default_plugins", state)
 }
+
+// DefaultOn is whether a default plugin is on: installed and switched on,
+// or not installed yet and never removed (it's on from the first run, so
+// a host that hasn't installed it yet, a one-off command's, says on). A
+// core feature behind a default plugin asks this rather than Get.
+func (h *Host) DefaultOn(ctx context.Context, key string) bool {
+	if p := h.Get(key); p != nil {
+		return p.Enabled && p.module != nil
+	}
+	state, err := h.env.Setting(ctx, "default_plugins")
+	if err != nil {
+		return true
+	}
+	prev, _ := state[key].(map[string]any)
+	return prev["removed"] != true
+}

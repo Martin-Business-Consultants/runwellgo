@@ -300,7 +300,7 @@ func (a *App) meJSON(ctx context.Context, c *Ctx) (Obj, error) {
 	}
 	return O("id", u.ID, "name", u.DisplayName(), "email_address", u.Email, "role", u.Role, "agent", u.IsAgent(),
 		"person_id", u.Person().ID, "permissions", perms, "two_factor", otp.Valid, "two_factor_required", s.RequireTwoFactor, "text_size", textSize, "nav_plugins", navPlugins,
-		"terms", s.TermsJSON(), "prices", s.Prices, "index_view", s.IndexView, "team", team), nil
+		"terms", s.TermsJSON(), "prices", s.Prices, "agreements", a.agreementsOn(ctx), "index_view", s.IndexView, "team", team), nil
 }
 
 // team is everyone active on staff (people, not agents), by name.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +135,10 @@ func (a *App) briefing(ctx context.Context, actor *Actor, limit int) ([]Briefing
 		{"overdue_todos", "Overdue work", func() ([]Obj, int, error) {
 			return a.briefTodos(ctx, `t.status != 'done' AND t.due_on < ?`, `t.id`, limit, today, today)
 		}},
+	}
+	if !a.agreementsOn(ctx) {
+		// Agreements off: nothing waits on a client's decision or to be sent.
+		parts = slices.DeleteFunc(parts, func(p part) bool { return p.key == "awaiting_client" || p.key == "drafts" })
 	}
 	var out []BriefingSection
 	for _, p := range parts {

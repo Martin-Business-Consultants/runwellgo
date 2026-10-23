@@ -18,14 +18,14 @@ import (
 func init() { routeSets = append(routeSets, (*App).scopeItemRoutes) }
 
 func (a *App) scopeItemRoutes(mux *http.ServeMux) {
-	a.handle(mux, "GET /api/scope_items/{id}", a.showScopeItem, tool("show_scope_item", "Show a scope item",
+	a.handle(mux, "GET /api/scope_items/{id}", a.showScopeItem, agreementRoute, tool("show_scope_item", "Show a scope item",
 		note("A scope item with its work and how delivery stands.")))
-	a.handle(mux, "POST /api/agreement_versions/{id}/scope_items", a.createScopeItem, tool("add_scope_item", "Add a scope item to a draft",
+	a.handle(mux, "POST /api/agreement_versions/{id}/scope_items", a.createScopeItem, agreementRoute, tool("add_scope_item", "Add a scope item to a draft",
 		note("A line of what we agreed, on a draft agreement version. The internal estimate never reaches the client."),
 		body("scope_item", `{description (required), price_cents: integer, internal_estimate}`, true)))
-	a.handle(mux, "PATCH /api/scope_items/{id}", a.updateScopeItem, tool("update_scope_item", "Change a scope item on a draft",
+	a.handle(mux, "PATCH /api/scope_items/{id}", a.updateScopeItem, agreementRoute, tool("update_scope_item", "Change a scope item on a draft",
 		body("scope_item", `{description, price_cents: integer, internal_estimate}`, true)))
-	a.handle(mux, "DELETE /api/scope_items/{id}", a.removeScopeItem, tool("remove_scope_item", "Remove a scope item from a draft"))
+	a.handle(mux, "DELETE /api/scope_items/{id}", a.removeScopeItem, agreementRoute, tool("remove_scope_item", "Remove a scope item from a draft"))
 }
 
 // ScopeItem is one line of an agreement version.

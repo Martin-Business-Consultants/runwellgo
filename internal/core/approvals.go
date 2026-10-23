@@ -18,8 +18,8 @@ import (
 func init() { routeSets = append(routeSets, (*App).approvalRoutes) }
 
 func (a *App) approvalRoutes(mux *http.ServeMux) {
-	a.handle(mux, "GET /api/approve/{token}", a.showApproval, open)
-	a.handle(mux, "POST /api/approve/{token}", a.decideApproval, open)
+	a.handle(mux, "GET /api/approve/{token}", a.showApproval, agreementRoute, open)
+	a.handle(mux, "POST /api/approve/{token}", a.decideApproval, agreementRoute, open)
 }
 
 // ApprovalLink is a signed link a contact got to decide on a version.

@@ -202,8 +202,12 @@ func (a *App) homeEngagements(ctx context.Context, me int64, today string) ([]Ob
 	if err != nil {
 		return nil, err
 	}
+	off := !a.agreementsOn(ctx)
 	out := make([]Obj, len(list))
 	for i, e := range list {
+		if off && e.state != "closed" && e.state != "internal" {
+			e.state = "approved" // nothing to agree (Engagement.State)
+		}
 		health := "On track"
 		switch {
 		case late[e.id] > 0:

@@ -32,6 +32,12 @@ asks for (the card lists it, and each grant can be unticked). One with
 `Default: true` is installed, granted and switched on at first run instead,
 and isn't put back once someone removes it.
 
+A default plugin can also be the switch for part of the core:
+[plugins/agreements](../plugins/agreements/agreements.go) has no code of its
+own, and the core's agreement routes are marked `partOf(agreements.Key)`. While
+it's off (or removed) they answer 404 and their tools aren't offered;
+`Host.DefaultOn` is what the core asks.
+
 ## The module
 
 ```go

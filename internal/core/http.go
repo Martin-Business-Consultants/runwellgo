@@ -296,6 +296,10 @@ func (a *App) handle(mux *http.ServeMux, pattern string, h handlerFunc, opts ...
 				c.fail(fmt.Errorf("panic: %v", rec))
 			}
 		}()
+		if rt.plugin != "" && !a.plugins.DefaultOn(r.Context(), rt.plugin) {
+			c.fail(pluginOff(rt.plugin))
+			return
+		}
 		actor, err := a.authenticate(c, rt.portal)
 		if err != nil && rt.auth {
 			c.fail(err)

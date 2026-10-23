@@ -215,6 +215,7 @@ func (a *App) promoteRequestEngagement(c *Ctx) error {
 	}
 	var engID int64
 	var ref string
+	on := a.agreementsOn(c.R.Context())
 	err = a.write(c.R.Context(), c.Actor, func(t *Tx) error {
 		if err := t.reqAdoptClient(q, body["client_id"]); err != nil {
 			return err
@@ -234,12 +235,15 @@ func (a *App) promoteRequestEngagement(c *Ctx) error {
 		if err != nil {
 			return err
 		}
-		version, err := t.reqDraftVersion(engID, nil, nil)
-		if err != nil {
-			return err
-		}
-		if _, err := t.reqAddScopeItem(version, q.Subject, 0); err != nil {
-			return err
+		// With agreements off it's underway, with no draft to put it in.
+		if on {
+			version, err := t.reqDraftVersion(engID, nil, nil)
+			if err != nil {
+				return err
+			}
+			if _, err := t.reqAddScopeItem(version, q.Subject, 0); err != nil {
+				return err
+			}
 		}
 		t.Reindex("Engagement", engID)
 		return t.markPromoted(q, "Engagement", engID)
@@ -249,6 +253,10 @@ func (a *App) promoteRequestEngagement(c *Ctx) error {
 	}
 	c.Summary = "Drafted " + ref + " from the request."
 	c.Crumbs = []Crumb{step("Send the agreement once it's ready", "show_engagement", "ref", ref)}
+	if !on {
+		c.Summary = "Started " + ref + " from the request."
+		c.Crumbs = []Crumb{step("Add work", "create_work", "ref", ref)}
+	}
 	return c.JSON(200, O("summary", c.Summary, "path", "/engagements/"+ref,
 		"engagement", a.agentRef("Engagement", engID, ref, ref+" "+title, "/engagements/"+ref)))
 }

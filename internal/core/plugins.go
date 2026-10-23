@@ -7,6 +7,7 @@ import (
 
 	"github.com/Martin-Business-Consultants/runwellgo/internal/plugin"
 	"github.com/Martin-Business-Consultants/runwellgo/internal/store"
+	"github.com/Martin-Business-Consultants/runwellgo/plugins/agreements"
 	ai "github.com/Martin-Business-Consultants/runwellgo/plugins/ai"
 	"github.com/Martin-Business-Consultants/runwellgo/plugins/chat"
 	"github.com/Martin-Business-Consultants/runwellgo/plugins/hello"
@@ -37,7 +38,7 @@ func PluginTables(ctx context.Context, db *store.DB) error {
 // run (plugin.Host.EnsureDefaults), the rest wait for an owner to install
 // them from Settings › Plugins.
 func builtinPlugins() []*plugin.Module {
-	return []*plugin.Module{hello.Module(), timetracking.Module(), myday.Module(), websitechecklist.Module(), ai.Module(), chat.Module(), reports.Module(), runners.Module()}
+	return []*plugin.Module{agreements.Module(), hello.Module(), timetracking.Module(), myday.Module(), websitechecklist.Module(), ai.Module(), chat.Module(), reports.Module(), runners.Module()}
 }
 
 func init() {
