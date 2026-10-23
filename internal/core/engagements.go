@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -104,11 +105,11 @@ func (a *App) engagementRoutes(mux *http.ServeMux) {
 		note("An engagement with its agreement versions (drafts and sent), scope, work, commitments, notes, documents and history."),
 		next("create_agreement_version", "add_scope_item", "create_work")))
 	a.handle(mux, "POST /api/engagements", a.createEngagement, tool("create_engagement", "Start an engagement", note(engagementCreateNote),
-		body("engagement", `{client_id (required), label: project|work_order|service, shape: fixed|recurring, title (required), description, estimate_notes, custom_fields: {key: value}}`, true),
+		body("engagement", `{client_id (required), label: project|work_order|service, shape: fixed|recurring, title (required), description, estimate_notes, price_cents: integer (whole cents, 150000 for $1,500.00; null for none), custom_fields: {key: value}}`, true),
 		next("add_scope_item", "send_agreement")))
 	a.handle(mux, "POST /api/clients/{id}/engagements", a.createEngagement)
 	a.handle(mux, "PATCH /api/engagements/{ref}", a.updateEngagement, tool("update_engagement", "Change an engagement",
-		body("engagement", `{title, description, estimate_notes, label: project|work_order|service, shape: fixed|recurring, custom_fields: {key: value}}`, true)))
+		body("engagement", `{title, description, estimate_notes, label: project|work_order|service, shape: fixed|recurring, price_cents: integer (whole cents; null clears it), custom_fields: {key: value}}`, true)))
 	a.handle(mux, "DELETE /api/engagements/{ref}", a.deleteEngagement, need("delete_records"), tool("delete_engagement", "Delete an engagement",
 		note("Only while nothing was ever sent to the client: its draft, work and notes go with it.")))
 	a.handle(mux, "POST /api/engagements/{ref}/close", a.closeEngagement, need("close_engagements"), tool("close_engagement", "Mark an engagement complete, or cancel it",
@@ -134,6 +135,7 @@ type Engagement struct {
 	Title          string
 	Description    string
 	EstimateNotes  string
+	PriceCents     store.NullInt // what it's priced at, apart from any agreement; null when unpriced
 	ClosedAt       store.Time
 	CloseReason    string
 	CloseOutcome   string
@@ -150,14 +152,14 @@ type Engagement struct {
 }
 
 const engagementSelect = `SELECT e.id, e.client_id, e.ref, e.label, e.shape, e.title, COALESCE(e.description, ''), COALESCE(e.estimate_notes, ''),
-	e.closed_at, COALESCE(e.close_reason, ''), COALESCE(e.close_outcome, ''), COALESCE(e.created_by_id, 0), e.created_at, e.updated_at,
+	e.price_cents, e.closed_at, COALESCE(e.close_reason, ''), COALESCE(e.close_outcome, ''), COALESCE(e.created_by_id, 0), e.created_at, e.updated_at,
 	c.name, c.internal, COALESCE(c.time_zone, '')
 	FROM engagements e JOIN clients c ON c.id = e.client_id`
 
 func scanEngagement(r interface{ Scan(...any) error }) (*Engagement, error) {
 	var e Engagement
 	err := r.Scan(&e.ID, &e.ClientID, &e.Ref, &e.Label, &e.Shape, &e.Title, &e.Description, &e.EstimateNotes,
-		&e.ClosedAt, &e.CloseReason, &e.CloseOutcome, &e.CreatedByID, &e.CreatedAt, &e.UpdatedAt,
+		&e.PriceCents, &e.ClosedAt, &e.CloseReason, &e.CloseOutcome, &e.CreatedByID, &e.CreatedAt, &e.UpdatedAt,
 		&e.ClientName, &e.ClientInternal, &e.ClientTimeZone)
 	return &e, err
 }
@@ -375,7 +377,12 @@ func (a *App) engagementJSON(e *Engagement, custom Obj, s *Settings) Obj {
 	if e.Closed() {
 		o = o.Set("close_outcome", nullable(e.CloseOutcome))
 	}
+	var price, priceCents any
+	if e.PriceCents.Valid {
+		price, priceCents = formatCents(e.PriceCents.Int64), e.PriceCents.Int64
+	}
 	return o.Set("internal", e.Internal()).Set("agreed_amount", formatCents(amount)).Set("agreed_amount_cents", amount).
+		Set("price", price).Set("price_cents", priceCents).
 		Set("client", a.agentRef("Client", e.ClientID, "", e.ClientName, fmt.Sprintf("/clients/%d", e.ClientID))).
 		Set("closed", e.Closed()).Set("custom_fields", custom).
 		Set("active", e.Active()).Set("deletable", e.Deletable()).
@@ -445,7 +452,7 @@ func engagementCounts(list []*Engagement) map[string]int {
 }
 
 // engagementSorts are the engagements table's sortable columns.
-var engagementSorts = sortPaths{"ref": by("ref"), "title": by("title"), "type": by("label"), "client": by("client", "display_name")}
+var engagementSorts = sortPaths{"ref": by("ref"), "title": by("title"), "type": by("label"), "client": by("client", "display_name"), "price": by("price_cents")}
 
 func (a *App) listEngagements(c *Ctx) error {
 	ctx := c.R.Context()
@@ -851,7 +858,45 @@ func (a *App) engagementParams(ctx context.Context, body map[string]any, partial
 			out[k] = nullable(sanitizeRichText(str(body[k])))
 		}
 	}
+	if has(body, "price_cents") {
+		price, msg := priceCents(body["price_cents"])
+		if msg != "" {
+			inv.Add("price_cents", msg)
+		}
+		out["price_cents"] = price
+	}
 	return out, inv.Err()
+}
+
+// priceCents is an engagement's price as sent: whole cents, none for null
+// or a blank, and a message when it's neither (Rails' numericality words).
+func priceCents(v any) (price any, msg string) {
+	if s, ok := v.(string); ok {
+		if s = strings.TrimSpace(s); s == "" {
+			return nil, ""
+		}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return nil, "is not a number"
+		}
+		v = f
+	}
+	if v == nil {
+		return nil, ""
+	}
+	if _, ok := v.(float64); !ok {
+		if _, ok := v.(json.Number); !ok {
+			return nil, "is not a number"
+		}
+	}
+	n, ok := intOf(v)
+	switch {
+	case !ok:
+		return nil, "must be an integer"
+	case n < 0:
+		return nil, "must be greater than or equal to 0"
+	}
+	return n, ""
 }
 
 // nextRef is the next ref for a label: its prefix (Settings › Names) and one
@@ -889,8 +934,8 @@ func (t *Tx) insertEngagement(fields, custom map[string]any) (id int64, ref stri
 	if uid := t.Actor.UserID(); uid != 0 {
 		createdBy = uid
 	}
-	id, err = t.Insert(`INSERT INTO engagements (client_id, ref, label, shape, title, description, estimate_notes, created_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		fields["client_id"], ref, fields["label"], fields["shape"], fields["title"], fields["description"], fields["estimate_notes"], createdBy, now, now)
+	id, err = t.Insert(`INSERT INTO engagements (client_id, ref, label, shape, title, description, estimate_notes, price_cents, created_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		fields["client_id"], ref, fields["label"], fields["shape"], fields["title"], fields["description"], fields["estimate_notes"], fields["price_cents"], createdBy, now, now)
 	if err != nil {
 		return 0, "", false, err
 	}
